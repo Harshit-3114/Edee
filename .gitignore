@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.env
+*.log
+venv/
+env/
+*.egg-info/
+
+# Docker
+docker-compose.override.yml
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Secrets – never commit real keys!
+firebase-service-account.json
