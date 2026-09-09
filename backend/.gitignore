@@ -10,7 +10,9 @@ ENV/
 
 # Environment
 .env
-.firebase-service-account.json
+firebase-service-account.json
+*-service-account.json
+serviceAccountKey.json
 
 # IDE
 .vscode/
@@ -42,3 +44,7 @@ docker-compose.override.yml
 # Database
 *.db
 *.sqlite
+# Test artefacts
+.pytest_cache/
+.coverage
+htmlcov/

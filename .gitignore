@@ -2,20 +2,37 @@
 __pycache__/
 *.py[cod]
 *.so
-.env
-*.log
+*.egg-info/
 venv/
 env/
-*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
 
-# Docker
+# Node
+node_modules/
+.next/
+out/
+coverage/
+*.tsbuildinfo
+next-env.d.ts
+
+# Secrets - never commit these
+.env
+.env.*
+!.env.example
+!.env.local.example
+firebase-service-account.json
+*-service-account.json
+serviceAccountKey.json
+
+# Local overrides
 docker-compose.override.yml
 
-# IDE / OS
+# Editors / OS
 .vscode/
 .idea/
 .DS_Store
 Thumbs.db
-
-# Secrets – never commit real keys!
-firebase-service-account.json
+*.swp
+*.log

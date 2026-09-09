@@ -1,6 +1,73 @@
-# Edee Apply – College‑Application Platform (Backend)
+# Edee Apply – College-Application Platform
 
-> FastAPI service that powers the **Edee Apply** platform: student signup, college search & shortlisting, Razorpay payment, and role‑based admin portals.
+> FastAPI service plus a Next.js frontend: student signup, college search and
+> shortlisting, Razorpay payment, and four role-based portals.
+
+**Repository layout**
+
+```
+backend/    FastAPI, PostgreSQL, Alembic
+frontend/   Next.js 15, TypeScript, Tailwind v4
+```
+
+## Running the whole thing
+
+```bash
+# 1. Database
+docker compose up -d db
+
+# 2. Backend
+cd backend
+python -m venv venv && ./venv/Scripts/activate   # source venv/bin/activate on macOS/Linux
+pip install -r requirements.txt
+cp .env.example .env                             # fill in Firebase and Razorpay
+alembic upgrade head
+python -m seeds.colleges
+python -m seeds.users                            # one account per role
+uvicorn app.main:app --reload
+
+# 3. Frontend
+cd ../frontend
+npm install
+cp .env.local.example .env.local                 # fill in the Firebase web config
+npm run dev
+```
+
+| | URL |
+|---|---|
+| Frontend | http://localhost:3000 |
+| Student portal | http://localhost:3000/student/dashboard |
+| College portal | http://localhost:3000/college/dashboard |
+| Coaching portal | http://localhost:3000/coaching/dashboard |
+| Admin portal | http://localhost:3000/admin/dashboard |
+| API | http://localhost:8000 |
+| API docs | http://localhost:8000/docs (hidden in production) |
+
+Or `docker compose up` for all three.
+
+## How the two halves fit together
+
+The frontend never decides what a user may do; it decides what to *show*. Three
+layers stand between a request and the data, and only the last one is security:
+
+1. `frontend/middleware.ts` reads a `portal_role` cookie at the edge and
+   redirects before the wrong bundle is fetched. The cookie is client-written
+   and forgeable — a routing hint, not proof.
+2. `RoleGate` re-checks the role against the verified Firebase token.
+3. **The API** verifies the JWT and the row-level scope on every request.
+
+A forged cookie therefore gets a rendered shell and a wall of 403s.
+
+Portal endpoints take **no** `college_id` or `coaching_centre_id` parameter.
+The backend reads the scope from the token, which is what stops one college
+querying another's applicants.
+
+**Money is paise on the wire.** `college_courses.application_fee` is stored in
+rupees; every endpoint converts at the edge so the API, the checkout, and
+Razorpay all speak one unit.
+
+See [SECURITY-FIXES.md](SECURITY-FIXES.md) for the audit carried out during the
+integration, including two issues that were giving away free applications.
 
 ---
 

@@ -1,0 +1,190 @@
+@import 'tailwindcss';
+
+/*
+  Design tokens.
+
+  One accent for the whole product (emerald). Portal identity comes from the
+  nav and the content, never from a different accent colour - a student and an
+  admin should feel they are in the same product, one floor apart.
+
+  Shape rule, applied everywhere:
+    buttons, inputs, cards, tables .......... --radius  (8px)
+    badges and avatars ...................... full pill
+  Nothing else. No mixed corner scales.
+*/
+
+@theme {
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
+
+  --radius: 0.5rem;
+
+  --breakpoint-sm: 40rem;
+  --breakpoint-md: 48rem;
+  --breakpoint-lg: 64rem;
+  --breakpoint-xl: 80rem;
+  --breakpoint-2xl: 96rem;
+}
+
+:root {
+  color-scheme: light dark;
+
+  /* Surfaces */
+  --surface: #fbfbfa;
+  --surface-raised: #ffffff;
+  --surface-sunken: #f3f3f1;
+  --surface-hover: #f0f0ee;
+
+  /* Text */
+  --text-primary: #18181b;
+  --text-secondary: #52525b;
+  --text-muted: #71717a;
+  --text-inverse: #fafafa;
+
+  /* Lines */
+  --line: #e4e4e7;
+  --line-strong: #d4d4d8;
+
+  /* Accent - locked for the whole product */
+  --accent: #047857;
+  --accent-hover: #065f46;
+  --accent-subtle: #ecfdf5;
+  --accent-line: #a7f3d0;
+  --accent-text: #065f46;
+
+  /* Status */
+  --danger: #b91c1c;
+  --danger-subtle: #fef2f2;
+  --danger-line: #fecaca;
+  --warning: #a16207;
+  --warning-subtle: #fefce8;
+  --warning-line: #fde68a;
+  --info: #1d4ed8;
+  --info-subtle: #eff6ff;
+  --info-line: #bfdbfe;
+
+  --focus-ring: #047857;
+
+  /* Shadows are tinted to the surface hue, never pure black. */
+  --shadow-sm: 0 1px 2px rgb(24 24 27 / 0.06);
+  --shadow-md: 0 4px 16px -4px rgb(24 24 27 / 0.1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --surface: #0e0e11;
+    --surface-raised: #17171b;
+    --surface-sunken: #121215;
+    --surface-hover: #202027;
+
+    --text-primary: #f4f4f5;
+    --text-secondary: #a1a1aa;
+    --text-muted: #8b8b93;
+    --text-inverse: #18181b;
+
+    --line: #27272d;
+    --line-strong: #3a3a43;
+
+    --accent: #34d399;
+    --accent-hover: #6ee7b7;
+    --accent-subtle: #052e22;
+    --accent-line: #10614a;
+    --accent-text: #6ee7b7;
+
+    --danger: #f87171;
+    --danger-subtle: #2a1315;
+    --danger-line: #5f2224;
+    --warning: #fbbf24;
+    --warning-subtle: #2a2110;
+    --warning-line: #5c421a;
+    --info: #60a5fa;
+    --info-subtle: #101c2e;
+    --info-line: #1e3a63;
+
+    --focus-ring: #34d399;
+
+    --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
+    --shadow-md: 0 4px 16px -4px rgb(0 0 0 / 0.55);
+  }
+}
+
+@layer base {
+  * {
+    border-color: var(--line);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--surface);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* One focus treatment for the whole product. */
+  :where(a, button, input, select, textarea, [tabindex]):focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  /* Money and counts read as data, not prose. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+    font-family: var(--font-mono);
+  }
+}
+
+@layer utilities {
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      var(--surface-sunken) 25%,
+      var(--surface-hover) 37%,
+      var(--surface-sunken) 63%
+    );
+    background-size: 400% 100%;
+    animation: skeleton-shimmer 1.4s ease infinite;
+  }
+}
+
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0 50%;
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .rise {
+    animation: rise 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

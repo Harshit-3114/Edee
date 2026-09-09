@@ -1,5 +1,3 @@
-
-
 services:
   db:
     image: postgres:16
@@ -8,8 +6,10 @@ services:
       POSTGRES_USER: dev
       POSTGRES_PASSWORD: dev
       POSTGRES_DB: college_platform
+    # Bound to loopback. Without the 127.0.0.1 prefix Docker publishes on
+    # 0.0.0.0, which puts a dev/dev Postgres on every network the laptop joins.
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -27,15 +27,39 @@ services:
       RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID}
       RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET}
       RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET}
+      CORS_ORIGINS: http://localhost:3000
       ENVIRONMENT: development
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     volumes:
       - ./backend:/app
     depends_on:
       db:
         condition: service_healthy
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: college-platform-frontend
+    env_file:
+      - ./frontend/.env.local
+    environment:
+      # Reached from the browser, not from inside the compose network, so this
+      # is the host-published address rather than http://backend:8000.
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+      WATCHPACK_POLLING: "true"
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - ./frontend:/app
+      # Keep the container's own node_modules and build cache: the host copies
+      # are built for a different platform and would shadow them.
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      - backend
 
 volumes:
   pgdata:

@@ -1,84 +1,157 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from app.db.connection import get_db
 from app.middleware.auth import get_current_user
-from typing import Optional
+from typing import Literal, Optional
+from uuid import UUID
 
 router = APIRouter()
 
 
 @router.get("/")
 async def list_colleges(
-    stream: Optional[str] = Query(None, description="UG or PG"),
-    state: Optional[str] = Query(None),
-    search: Optional[str] = Query(None),
-    limit: int = Query(20, le=100),
-    offset: int = Query(0),
+    # Literal rather than str: an unconstrained value reaches the query planner
+    # and shows up in logs, and "UG or PG" in a docstring is not a check.
+    stream: Optional[Literal["UG", "PG"]] = Query(None),
+    state: Optional[str] = Query(None, max_length=64),
+    type: Optional[Literal["private", "government", "deemed"]] = Query(None),
+    search: Optional[str] = Query(None, max_length=120),
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
     user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    conditions = ["c.active = true"]
-    params = {"limit": limit, "offset": offset}
+    """
+    Colleges with their open courses nested, newest filter wins.
 
+    Every role may read this: a college checking how it appears, a coaching
+    centre advising a student, an admin doing support. It carries no personal
+    data, so there is nothing to scope.
+
+    Fees are returned in **paise**. They are stored in rupees, and converting
+    at the edge keeps one unit in every response and in the payment flow.
+    """
+    conditions = ["c.active = true"]
+    params: dict = {"limit": limit, "offset": offset}
+
+    # The fragments below are literals chosen by this function. Only values are
+    # ever bound from input, so the f-string cannot be steered by a caller.
     if stream:
         conditions.append("cc.stream = :stream")
         params["stream"] = stream
     if state:
         conditions.append("c.state = :state")
         params["state"] = state
+    if type:
+        conditions.append("c.type = :type")
+        params["type"] = type
     if search:
         conditions.append("c.name ILIKE :search")
-        params["search"] = f"%{search}%"
+        # Escape the LIKE wildcards a user can type, so "100%" is not a
+        # full-table scan wearing a disguise.
+        escaped = search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        params["search"] = f"%{escaped}%"
 
     where = " AND ".join(conditions)
 
-    result = await db.execute(text(f"""
-        SELECT
-            c.id           AS college_id,
-            c.name         AS college_name,
-            c.city,
-            c.state,
-            c.type,
-            cc.id          AS course_id,
-            cc.course_name,
-            cc.stream,
-            cc.seats,
-            cc.application_fee
-        FROM colleges c
-        JOIN college_courses cc ON cc.college_id = c.id AND cc.active = true
-        WHERE {where}
-        ORDER BY c.name, cc.course_name
-        LIMIT :limit OFFSET :offset
-    """), params)
-
-    rows = result.fetchall()
-    return [dict(row._mapping) for row in rows]
+    # Paginate over colleges, not over the college-course join: with LIMIT on
+    # the joined rows a college offering 20 courses fills the page by itself.
+    result = await db.execute(
+        text(
+            f"""
+            WITH page AS (
+                SELECT DISTINCT c.id, c.name
+                FROM colleges c
+                JOIN college_courses cc
+                  ON cc.college_id = c.id AND cc.active = true
+                WHERE {where}
+                ORDER BY c.name
+                LIMIT :limit OFFSET :offset
+            )
+            SELECT c.id,
+                   c.name,
+                   c.location,
+                   c.city,
+                   c.state,
+                   c.type,
+                   c.active,
+                   COALESCE(
+                       json_agg(
+                           json_build_object(
+                               'id', cc.id,
+                               'college_id', c.id,
+                               'course_name', cc.course_name,
+                               'stream', cc.stream,
+                               'duration_years', cc.duration_years,
+                               'seats', cc.seats,
+                               'application_fee', cc.application_fee * 100,
+                               'active', cc.active
+                           )
+                           ORDER BY cc.course_name
+                       ) FILTER (WHERE cc.id IS NOT NULL),
+                       '[]'
+                   ) AS courses
+            FROM page
+            JOIN colleges c ON c.id = page.id
+            LEFT JOIN college_courses cc
+                   ON cc.college_id = c.id AND cc.active = true
+            GROUP BY c.id, c.name, c.location, c.city, c.state, c.type, c.active
+            ORDER BY c.name
+            """
+        ),
+        params,
+    )
+    return [dict(row._mapping) for row in result.fetchall()]
 
 
 @router.get("/{college_id}")
 async def get_college(
-    college_id: str,
+    # Typed as UUID so a malformed id is a 422 from the framework rather than a
+    # database error surfacing as a 500.
+    college_id: UUID,
     user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(text("""
-        SELECT c.*, 
-               json_agg(json_build_object(
-                   'id', cc.id,
-                   'course_name', cc.course_name,
-                   'stream', cc.stream,
-                   'duration_years', cc.duration_years,
-                   'seats', cc.seats,
-                   'application_fee', cc.application_fee
-               )) as courses
-        FROM colleges c
-        LEFT JOIN college_courses cc ON cc.college_id = c.id AND cc.active = true
-        WHERE c.id = :college_id
-        GROUP BY c.id
-    """), {"college_id": college_id})
-    
+    result = await db.execute(
+        text(
+            """
+            SELECT c.id,
+                   c.name,
+                   c.location,
+                   c.city,
+                   c.state,
+                   c.type,
+                   c.active,
+                   COALESCE(
+                       json_agg(
+                           json_build_object(
+                               'id', cc.id,
+                               'college_id', c.id,
+                               'course_name', cc.course_name,
+                               'stream', cc.stream,
+                               'duration_years', cc.duration_years,
+                               'seats', cc.seats,
+                               'application_fee', cc.application_fee * 100,
+                               'active', cc.active
+                           )
+                           ORDER BY cc.course_name
+                       ) FILTER (WHERE cc.id IS NOT NULL),
+                       '[]'
+                   ) AS courses
+            FROM colleges c
+            LEFT JOIN college_courses cc
+                   ON cc.college_id = c.id AND cc.active = true
+            WHERE c.id = :college_id AND c.active = true
+            GROUP BY c.id
+            """
+        ),
+        {"college_id": college_id},
+    )
+
     row = result.fetchone()
     if not row:
+        # HTTPException was not imported before, so this line raised NameError
+        # and every missing college came back as a 500 with a stack trace.
         raise HTTPException(status_code=404, detail="College not found")
     return dict(row._mapping)

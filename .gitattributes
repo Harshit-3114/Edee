@@ -1,0 +1,13 @@
+# Normalise line endings so Windows and Linux checkouts agree and diffs stay
+# readable. Without this, every file committed from Windows shows as fully
+# rewritten when someone on Linux touches it.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff  binary
+*.woff2 binary
+
+# Generated: collapse in diffs and exclude from language stats.
+package-lock.json linguist-generated=true -diff

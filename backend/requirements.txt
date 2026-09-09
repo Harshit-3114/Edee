@@ -7,7 +7,13 @@ pydantic==2.9.0
 pydantic-settings==2.5.0
 python-dotenv==1.0.1
 firebase-admin==6.5.0
-razorpay==1.4.1
+razorpay==2.0.1
 httpx==0.27.2
 python-multipart==0.0.12
 email-validator==2.1.0.post1
+
+# razorpay (still, as of 2.0.1) imports pkg_resources at module scope.
+# setuptools 81 deprecated it and 84 removed it, so on Python 3.12 the app
+# cannot even be imported without this pin. Revisit when razorpay drops the
+# import; until then, upgrading setuptools past 80 breaks the backend outright.
+setuptools<81

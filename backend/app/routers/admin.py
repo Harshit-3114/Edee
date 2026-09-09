@@ -1,0 +1,527 @@
+"""
+Admin portal.
+
+Unscoped by design: an admin sees every college, centre and student. That makes
+this the highest-value router in the codebase, so every write appends to
+audit_events and role assignment lives here and nowhere else.
+"""
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import text
+from uuid import UUID, uuid4
+from typing import Literal, Optional
+from pydantic import BaseModel, EmailStr, Field
+import logging
+
+from app.db.connection import get_db
+from app.middleware.auth import require_roles
+from app.services.firebase import assign_role, revoke_access
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(dependencies=[Depends(require_roles("admin"))])
+
+
+class CollegeCreate(BaseModel):
+    name: str = Field(min_length=3, max_length=200)
+    location: str = Field(max_length=300)
+    city: str = Field(min_length=1, max_length=80)
+    state: str = Field(min_length=1, max_length=80)
+    type: Literal["private", "government", "deemed"]
+
+
+class CollegeUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=3, max_length=200)
+    location: Optional[str] = Field(default=None, max_length=300)
+    city: Optional[str] = Field(default=None, min_length=1, max_length=80)
+    state: Optional[str] = Field(default=None, min_length=1, max_length=80)
+    type: Optional[Literal["private", "government", "deemed"]] = None
+    active: Optional[bool] = None
+
+
+class CentreCreate(BaseModel):
+    name: str = Field(min_length=3, max_length=200)
+    city: str = Field(min_length=1, max_length=80)
+    state: str = Field(min_length=1, max_length=80)
+    contact_email: EmailStr
+    contact_phone: Optional[str] = Field(default=None, max_length=20)
+
+
+class CentreUpdate(BaseModel):
+    active: Optional[bool] = None
+
+
+class UserCreate(BaseModel):
+    name: str = Field(min_length=2, max_length=120)
+    email: EmailStr
+    # "student" is absent: students sign themselves up, and minting one here
+    # would create an account with no verified phone or email behind it.
+    role: Literal["college", "coaching", "admin"]
+    college_id: Optional[UUID] = None
+    coaching_centre_id: Optional[UUID] = None
+
+
+class UserUpdate(BaseModel):
+    active: Optional[bool] = None
+
+
+async def _audit(db: AsyncSession, action: str, entity_type: str, entity_id) -> None:
+    await db.execute(
+        text(
+            """
+            INSERT INTO audit_events
+                (id, actor_role, action, entity_type, entity_id)
+            VALUES (:id, 'admin', :action, :etype, :eid)
+            """
+        ),
+        {"id": uuid4(), "action": action, "etype": entity_type, "eid": entity_id},
+    )
+
+
+@router.get("/dashboard")
+async def dashboard(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        text(
+            """
+            SELECT (SELECT count(*) FROM students)          AS students,
+                   (SELECT count(*) FROM colleges)          AS colleges,
+                   (SELECT count(*) FROM coaching_centers)  AS coaching_centres,
+                   (SELECT count(*) FROM applications)      AS applications,
+                   (SELECT COALESCE(sum(amount), 0) FROM payments
+                     WHERE status = 'captured')             AS revenue
+            """
+        )
+    )
+    return dict(result.fetchone()._mapping)
+
+
+@router.get("/colleges")
+async def list_colleges(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        text(
+            """
+            SELECT c.id, c.name, c.location, c.city, c.state, c.type, c.active,
+                   COALESCE(
+                       json_agg(json_build_object('id', cc.id, 'active', cc.active))
+                       FILTER (WHERE cc.id IS NOT NULL), '[]'
+                   ) AS courses
+            FROM colleges c
+            LEFT JOIN college_courses cc ON cc.college_id = c.id
+            GROUP BY c.id
+            ORDER BY c.name
+            """
+        )
+    )
+    return [dict(r._mapping) for r in result.fetchall()]
+
+
+@router.post("/colleges", status_code=201)
+async def create_college(body: CollegeCreate, db: AsyncSession = Depends(get_db)):
+    college_id = uuid4()
+    await db.execute(
+        text(
+            """
+            INSERT INTO colleges (id, name, location, city, state, type, active)
+            VALUES (:id, :name, :location, :city, :state, :type, true)
+            """
+        ),
+        {"id": college_id, **body.model_dump()},
+    )
+    await _audit(db, "college.created", "college", college_id)
+    await db.commit()
+    return {"id": str(college_id)}
+
+
+@router.get("/colleges/{college_id}")
+async def get_college(college_id: UUID, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        text(
+            """
+            SELECT c.id, c.name, c.location, c.city, c.state, c.type, c.active,
+                   COALESCE(
+                       json_agg(
+                           json_build_object(
+                               'id', cc.id, 'college_id', c.id,
+                               'course_name', cc.course_name, 'stream', cc.stream,
+                               'duration_years', cc.duration_years,
+                               'seats', cc.seats,
+                               'application_fee', cc.application_fee * 100,
+                               'active', cc.active
+                           ) ORDER BY cc.course_name
+                       ) FILTER (WHERE cc.id IS NOT NULL), '[]'
+                   ) AS courses,
+                   (SELECT count(*) FROM applications a WHERE a.college_id = c.id)
+                       AS application_count,
+                   (SELECT COALESCE(sum(oi.amount), 0)
+                      FROM order_items oi
+                      JOIN orders o ON o.id = oi.order_id AND o.status = 'paid'
+                     WHERE oi.college_id = c.id) AS fees_collected
+            FROM colleges c
+            LEFT JOIN college_courses cc ON cc.college_id = c.id
+            WHERE c.id = :cid
+            GROUP BY c.id
+            """
+        ),
+        {"cid": college_id},
+    )
+    row = result.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="College not found")
+
+    staff = await db.execute(
+        text(
+            """
+            SELECT id, name, email, 'college' AS role, NULL AS org_name,
+                   active, created_at
+            FROM college_admins WHERE college_id = :cid ORDER BY created_at
+            """
+        ),
+        {"cid": college_id},
+    )
+    return {**dict(row._mapping), "staff": [dict(r._mapping) for r in staff.fetchall()]}
+
+
+@router.patch("/colleges/{college_id}")
+async def update_college(
+    college_id: UUID, body: CollegeUpdate, db: AsyncSession = Depends(get_db)
+):
+    updates = body.model_dump(exclude_none=True)
+    if not updates:
+        raise HTTPException(status_code=400, detail="Nothing to update")
+
+    allowed = ("name", "location", "city", "state", "type", "active")
+    fields = [k for k in allowed if k in updates]
+    assignments = ", ".join(f"{k} = :{k}" for k in fields)
+
+    result = await db.execute(
+        text(f"UPDATE colleges SET {assignments} WHERE id = :cid RETURNING id"),
+        {**{k: updates[k] for k in fields}, "cid": college_id},
+    )
+    if not result.fetchone():
+        await db.rollback()
+        raise HTTPException(status_code=404, detail="College not found")
+    await _audit(db, "college.updated", "college", college_id)
+    await db.commit()
+    return {"status": "updated"}
+
+
+@router.get("/coaching-centres")
+async def list_centres(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        text(
+            """
+            SELECT cc.id, cc.name, cc.city, cc.state, cc.active, cc.created_at,
+                   COALESCE(a.email, '') AS contact_email,
+                   ''                    AS contact_phone,
+                   (SELECT count(*) FROM student_coaching_links l
+                     WHERE l.coaching_center_id = cc.id) AS student_count
+            FROM coaching_centers cc
+            LEFT JOIN coaching_center_admins a
+                   ON a.coaching_center_id = cc.id AND a.active = true
+            GROUP BY cc.id, a.email
+            ORDER BY cc.name
+            """
+        )
+    )
+    return [dict(r._mapping) for r in result.fetchall()]
+
+
+@router.post("/coaching-centres", status_code=201)
+async def create_centre(body: CentreCreate, db: AsyncSession = Depends(get_db)):
+    centre_id = uuid4()
+    await db.execute(
+        text(
+            """
+            INSERT INTO coaching_centers (id, name, city, state, active)
+            VALUES (:id, :name, :city, :state, true)
+            """
+        ),
+        {
+            "id": centre_id,
+            "name": body.name,
+            "city": body.city,
+            "state": body.state,
+        },
+    )
+    await _audit(db, "coaching_centre.created", "coaching_centre", centre_id)
+    await db.commit()
+    return {"id": str(centre_id)}
+
+
+@router.patch("/coaching-centres/{centre_id}")
+async def update_centre(
+    centre_id: UUID, body: CentreUpdate, db: AsyncSession = Depends(get_db)
+):
+    if body.active is None:
+        raise HTTPException(status_code=400, detail="Nothing to update")
+    result = await db.execute(
+        text("UPDATE coaching_centers SET active = :active WHERE id = :cid RETURNING id"),
+        {"active": body.active, "cid": centre_id},
+    )
+    if not result.fetchone():
+        await db.rollback()
+        raise HTTPException(status_code=404, detail="Coaching centre not found")
+    await _audit(db, "coaching_centre.updated", "coaching_centre", centre_id)
+    await db.commit()
+    return {"status": "updated"}
+
+
+@router.get("/students")
+async def list_students(
+    search: Optional[str] = Query(None, max_length=120),
+    stream: Optional[Literal["UG", "PG"]] = Query(None),
+    limit: int = Query(50, ge=1, le=200),
+    db: AsyncSession = Depends(get_db),
+):
+    conditions = ["1 = 1"]
+    params: dict = {"limit": limit}
+    if search:
+        conditions.append(
+            "(s.name ILIKE :search OR s.email ILIKE :search OR s.phone ILIKE :search)"
+        )
+        escaped = search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        params["search"] = f"%{escaped}%"
+    if stream:
+        conditions.append("s.stream = :stream")
+        params["stream"] = stream
+
+    result = await db.execute(
+        text(
+            f"""
+            SELECT s.id, s.name, s.email, s.phone, s.stream, s.created_at,
+                   cc.name AS coaching_centre_name,
+                   COALESCE(sl.cnt, 0)  AS shortlist_count,
+                   COALESCE(app.cnt, 0) AS application_count
+            FROM students s
+            LEFT JOIN student_coaching_links l ON l.student_id = s.id
+            LEFT JOIN coaching_centers cc      ON cc.id = l.coaching_center_id
+            LEFT JOIN (SELECT student_id, count(*) cnt FROM shortlists
+                       GROUP BY student_id) sl ON sl.student_id = s.id
+            LEFT JOIN (SELECT student_id, count(*) cnt FROM applications
+                       GROUP BY student_id) app ON app.student_id = s.id
+            WHERE {" AND ".join(conditions)}
+            ORDER BY s.created_at DESC
+            LIMIT :limit
+            """
+        ),
+        params,
+    )
+    return [dict(r._mapping) for r in result.fetchall()]
+
+
+@router.get("/users")
+async def list_users(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        text(
+            """
+            SELECT ca.id, ca.name, ca.email, 'college' AS role,
+                   c.name AS org_name, ca.active, ca.created_at
+            FROM college_admins ca JOIN colleges c ON c.id = ca.college_id
+            UNION ALL
+            SELECT sa.id, sa.name, sa.email, 'coaching' AS role,
+                   cc.name AS org_name, sa.active, sa.created_at
+            FROM coaching_center_admins sa
+            JOIN coaching_centers cc ON cc.id = sa.coaching_center_id
+            UNION ALL
+            SELECT pu.id, pu.name, pu.email, 'admin' AS role,
+                   NULL AS org_name, pu.active, pu.created_at
+            FROM platform_users pu
+            ORDER BY created_at DESC
+            """
+        )
+    )
+    return [dict(r._mapping) for r in result.fetchall()]
+
+
+@router.post("/users", status_code=201)
+async def create_user(body: UserCreate, db: AsyncSession = Depends(get_db)):
+    """
+    Creates a staff account and grants its role in one step.
+
+    The role and its organisation are validated together: a college account
+    with no college is an account that passes require_roles("college") and then
+    fails every scoped query behind it.
+    """
+    from firebase_admin import auth as firebase_auth
+
+    if body.role == "college" and not body.college_id:
+        raise HTTPException(status_code=422, detail="A college account needs a college")
+    if body.role == "coaching" and not body.coaching_centre_id:
+        raise HTTPException(status_code=422, detail="A coaching account needs a centre")
+    if body.role == "admin" and (body.college_id or body.coaching_centre_id):
+        raise HTTPException(
+            status_code=422, detail="An admin account is not attached to an organisation"
+        )
+
+    email = body.email.lower().strip()
+
+    # Create or adopt the Firebase user first: if this fails there is no
+    # half-made row to clean up.
+    try:
+        fb_user = firebase_auth.get_user_by_email(email)
+    except firebase_auth.UserNotFoundError:
+        fb_user = firebase_auth.create_user(email=email, display_name=body.name)
+    except Exception:
+        logger.exception("Firebase lookup failed for %s", email)
+        raise HTTPException(status_code=502, detail="Could not reach the auth provider")
+
+    user_id = uuid4()
+    if body.role == "college":
+        await db.execute(
+            text(
+                """
+                INSERT INTO college_admins
+                    (id, firebase_uid, college_id, name, email, active)
+                VALUES (:id, :uid, :org, :name, :email, true)
+                """
+            ),
+            {
+                "id": user_id,
+                "uid": fb_user.uid,
+                "org": body.college_id,
+                "name": body.name,
+                "email": email,
+            },
+        )
+        assign_role(fb_user.uid, "college", college_id=str(body.college_id))
+    elif body.role == "coaching":
+        await db.execute(
+            text(
+                """
+                INSERT INTO coaching_center_admins
+                    (id, firebase_uid, coaching_center_id, name, email, active)
+                VALUES (:id, :uid, :org, :name, :email, true)
+                """
+            ),
+            {
+                "id": user_id,
+                "uid": fb_user.uid,
+                "org": body.coaching_centre_id,
+                "name": body.name,
+                "email": email,
+            },
+        )
+        assign_role(
+            fb_user.uid, "coaching", coaching_centre_id=str(body.coaching_centre_id)
+        )
+    else:
+        await db.execute(
+            text(
+                """
+                INSERT INTO platform_users (id, firebase_uid, name, email, role, active)
+                VALUES (:id, :uid, :name, :email, 'admin', true)
+                """
+            ),
+            {"id": user_id, "uid": fb_user.uid, "name": body.name, "email": email},
+        )
+        assign_role(fb_user.uid, "admin")
+
+    await _audit(db, f"user.created.{body.role}", "user", user_id)
+    await db.commit()
+    return {"id": str(user_id), "email": email}
+
+
+@router.patch("/users/{user_id}")
+async def update_user(
+    user_id: UUID, body: UserUpdate, db: AsyncSession = Depends(get_db)
+):
+    """
+    Revoking clears the role claim and the refresh tokens, so access ends on
+    the next request rather than whenever the current token happens to expire.
+    """
+    if body.active is None:
+        raise HTTPException(status_code=400, detail="Nothing to update")
+
+    firebase_uid = None
+    for table, role in (
+        ("college_admins", "college"),
+        ("coaching_center_admins", "coaching"),
+        ("platform_users", "admin"),
+    ):
+        result = await db.execute(
+            text(
+                f"UPDATE {table} SET active = :active WHERE id = :uid "
+                "RETURNING firebase_uid"
+            ),
+            {"active": body.active, "uid": user_id},
+        )
+        row = result.fetchone()
+        if row:
+            firebase_uid = row[0]
+            found_role = role
+            break
+
+    if not firebase_uid:
+        await db.rollback()
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if body.active:
+        # Re-granting needs the organisation back, which lives in the row we
+        # just touched. Left to the create flow rather than guessed here.
+        await _audit(db, "user.restored", "user", user_id)
+    else:
+        revoke_access(firebase_uid)
+        await _audit(db, "user.revoked", "user", user_id)
+
+    await db.commit()
+    return {"status": "active" if body.active else "revoked", "role": found_role}
+
+
+@router.get("/payments")
+async def list_payments(
+    search: Optional[str] = Query(None, max_length=120),
+    limit: int = Query(100, ge=1, le=500),
+    db: AsyncSession = Depends(get_db),
+):
+    conditions = ["1 = 1"]
+    params: dict = {"limit": limit}
+    if search:
+        conditions.append("(s.name ILIKE :search OR p.razorpay_payment_id ILIKE :search)")
+        escaped = search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        params["search"] = f"%{escaped}%"
+
+    result = await db.execute(
+        text(
+            f"""
+            SELECT p.id, s.name AS student_name, p.razorpay_payment_id,
+                   p.amount, p.status, p.verified_at
+            FROM payments p
+            JOIN orders o   ON o.id = p.order_id
+            JOIN students s ON s.id = o.student_id
+            WHERE {" AND ".join(conditions)}
+            ORDER BY p.verified_at DESC
+            LIMIT :limit
+            """
+        ),
+        params,
+    )
+    return [dict(r._mapping) for r in result.fetchall()]
+
+
+@router.get("/audit")
+async def list_audit(
+    actor_role: Optional[Literal["student", "college", "coaching", "admin", "system"]] = Query(
+        None
+    ),
+    limit: int = Query(100, ge=1, le=500),
+    db: AsyncSession = Depends(get_db),
+):
+    conditions = ["1 = 1"]
+    params: dict = {"limit": limit}
+    if actor_role:
+        conditions.append("actor_role = :actor_role")
+        params["actor_role"] = actor_role
+
+    result = await db.execute(
+        text(
+            f"""
+            SELECT id, actor_role, action, entity_type, entity_id, created_at
+            FROM audit_events
+            WHERE {" AND ".join(conditions)}
+            ORDER BY created_at DESC
+            LIMIT :limit
+            """
+        ),
+        params,
+    )
+    return [dict(r._mapping) for r in result.fetchall()]
