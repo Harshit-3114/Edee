@@ -87,6 +87,13 @@ async def add_to_shortlist(
             status_code=404, detail="That course is not open at that college"
         )
 
+    # Serialise the count-and-insert with an advisory lock per student so two
+    # concurrent adds cannot both pass the < MAX_SHORTLIST check and over-fill.
+    await db.execute(
+        text("SELECT pg_advisory_xact_lock(hashtext(CAST(:sid AS TEXT)))"),
+        {"sid": str(student_id)},
+    )
+
     count = await db.execute(
         text("SELECT count(*) FROM shortlists WHERE student_id = :sid"),
         {"sid": student_id},

@@ -73,6 +73,9 @@ export default function CollegeDetailClient({ id }: { id: string }) {
         state: college.state.trim(),
         type: college.type,
         active: college.active,
+        landing_hero_image_url: college.landing_hero_image_url?.trim() || null,
+        landing_description: college.landing_description?.trim() || null,
+        landing_gallery_urls: college.landing_gallery_urls ?? null,
       });
       setSaved(true);
     } catch (err) {
@@ -224,6 +227,48 @@ export default function CollegeDetailClient({ id }: { id: string }) {
                 )}
               </Field>
             </div>
+
+            <Field
+              label="Landing page hero image"
+              hint="Public banner URL. The landing page needs no login to view."
+            >
+              {(fieldProps) => (
+                <Input
+                  {...fieldProps}
+                  type="url"
+                  value={college.landing_hero_image_url ?? ''}
+                  onChange={(event) => update('landing_hero_image_url', event.target.value)}
+                />
+              )}
+            </Field>
+
+            <Field label="Landing page description">
+              {(fieldProps) => (
+                <Textarea
+                  {...fieldProps}
+                  value={college.landing_description ?? ''}
+                  onChange={(event) => update('landing_description', event.target.value)}
+                />
+              )}
+            </Field>
+
+            <Field label="Landing page gallery" hint="One image URL per line.">
+              {(fieldProps) => (
+                <Textarea
+                  {...fieldProps}
+                  value={(college.landing_gallery_urls ?? []).join('\n')}
+                  onChange={(event) =>
+                    update(
+                      'landing_gallery_urls',
+                      event.target.value
+                        .split('\n')
+                        .map((line) => line.trim())
+                        .filter((line) => line.length > 0),
+                    )
+                  }
+                />
+              )}
+            </Field>
 
             {error && <ErrorState message={error} />}
 

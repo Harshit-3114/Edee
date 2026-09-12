@@ -21,6 +21,9 @@ export const metadata: Metadata = {
   },
   description:
     'Search colleges, shortlist courses, and pay application fees for UG and PG admissions across India.',
+  icons: {
+    icon: '/favicon.svg',
+  },
 };
 
 export const viewport: Viewport = {

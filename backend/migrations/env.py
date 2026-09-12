@@ -2,6 +2,7 @@
 from logging.config import fileConfig
 import sys
 import os
+from pathlib import Path
 
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
@@ -14,8 +15,16 @@ from alembic import context
 config = context.config
 
 # ------------------------------------------------------------------
-# 1️⃣  Pull the DB URL from the environment (set by docker‑compose)
+# 1️⃣  Pull the DB URL from the environment or from backend/.env
 # ------------------------------------------------------------------
+# When alembic runs locally the shell won't have the .env loaded, so
+# we load it explicitly from the backend directory (where .env lives).
+backend_root = Path(__file__).resolve().parents[1]
+dotenv_path = backend_root / ".env"
+if dotenv_path.is_file():
+    from dotenv import load_dotenv
+    load_dotenv(dotenv_path)
+
 db_url = os.getenv("DATABASE_URL")
 if db_url:
     config.set_main_option("sqlalchemy.url", db_url)
@@ -27,7 +36,7 @@ if config.config_file_name is not None:
 # add your model's MetaData object here
 # for 'autogenerate' support
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-from app.models.database import Base
+from app.models.database import Base  # noqa: E402  (path set up just above)
 
 target_metadata = Base.metadata
 

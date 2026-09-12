@@ -16,6 +16,7 @@ old tests silently meaningless rather than merely failing:
 The suite skips when Postgres is unreachable, so a machine without Docker
 running gets a clean skip rather than a wall of connection errors.
 """
+import os
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
@@ -26,24 +27,30 @@ from app.db.connection import get_db
 from app.middleware.auth import get_current_user
 from app.models.database import Base
 
-TEST_DATABASE_URL = "postgresql+asyncpg://dev:dev@localhost:5432/college_platform_test"
-
-engine = create_async_engine(TEST_DATABASE_URL)
-AsyncSessionLocal = async_sessionmaker(
-    engine, class_=AsyncSession, expire_on_commit=False
+TEST_DATABASE_URL = os.getenv(
+    "TEST_DATABASE_URL",
+    "postgresql+asyncpg://dev:dev@localhost:5433/college_platform_test",
 )
 
 
-# Not autouse: test_security.py runs without a database, and an autouse skip
-# here would take the whole suite down with it.
-@pytest_asyncio.fixture(scope="session")
+@pytest_asyncio.fixture
 async def test_db():
+    # One isolated schema per test. The routers commit, so a shared session
+    # database would leak students, colleges, slugs, phones, and invite uses
+    # from one test into the next; function scope prevents those false
+    # duplicate-key failures. The engine is also created in the same function
+    # loop, avoiding asyncpg cross-loop reuse.
+    engine = create_async_engine(TEST_DATABASE_URL)
+    AsyncSessionLocal = async_sessionmaker(
+        engine, class_=AsyncSession, expire_on_commit=False
+    )
     try:
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
     except Exception as exc:  # noqa: BLE001
+        await engine.dispose()
         pytest.skip(f"Postgres unreachable, skipping database tests: {exc}")
-    yield
+    yield AsyncSessionLocal
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
     await engine.dispose()
@@ -51,7 +58,7 @@ async def test_db():
 
 @pytest_asyncio.fixture
 async def db_session(test_db):
-    async with AsyncSessionLocal() as session:
+    async with test_db() as session:
         yield session
         await session.rollback()
 
@@ -102,9 +109,9 @@ async def seed_college(db_session):
     await db_session.execute(
         text(
             """
-            INSERT INTO colleges (id, name, location, city, state, type, active)
-            VALUES (:id, 'Fergusson College', 'FC Road', 'Pune', 'Maharashtra',
-                    'private', true)
+            INSERT INTO colleges (id, name, slug, location, city, state, type, active)
+            VALUES (:id, 'Fergusson College', 'fergusson-college', 'FC Road', 'Pune',
+                    'Maharashtra', 'private', true)
             """
         ),
         {"id": college_id},

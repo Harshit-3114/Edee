@@ -55,6 +55,31 @@ const config = [
     files: ['app/admin/**/*.tsx', 'components/admin/**/*.tsx'],
     rules: { 'no-restricted-imports': 'off' },
   },
+  {
+    // The public college landing pages are a fifth surface: unauthenticated
+    // and outside every portal. They may use college-domain display
+    // components, but never another portal's components — those may assume a
+    // signed-in user and a role claim that a visitor does not have.
+    files: ['app/colleges/**/*.tsx'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: [
+                '@/components/student/*',
+                '@/components/coaching/*',
+                '@/components/admin/*',
+              ],
+              message:
+                'Cross-portal import into a public page. Anything the public surface needs belongs in components/ui or components/college.',
+            },
+          ],
+        },
+      ],
+    },
+  },
 ];
 
 export default config;

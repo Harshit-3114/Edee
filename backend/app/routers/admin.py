@@ -8,14 +8,17 @@ audit_events and role assignment lives here and nowhere else.
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from uuid import UUID, uuid4
-from typing import Literal, Optional
-from pydantic import BaseModel, EmailStr, Field
+from typing import List, Literal, Optional
+from pydantic import BaseModel, EmailStr, Field, field_validator
 import logging
 
 from app.db.connection import get_db
 from app.middleware.auth import require_roles
 from app.services.firebase import assign_role, revoke_access
+from app.core.slug import is_valid_slug, make_slug
+from app.models.college import clean_gallery, dump_gallery, parse_gallery
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +31,27 @@ class CollegeCreate(BaseModel):
     city: str = Field(min_length=1, max_length=80)
     state: str = Field(min_length=1, max_length=80)
     type: Literal["private", "government", "deemed"]
+    # Optional slug override. Without it the slug is generated from the name;
+    # either way it must be unique, which the database enforces.
+    slug: Optional[str] = Field(default=None, max_length=120)
+    landing_hero_image_url: Optional[str] = Field(default=None, max_length=500)
+    landing_description: Optional[str] = Field(default=None, max_length=2000)
+    landing_gallery_urls: Optional[List[str]] = Field(default=None, max_length=10)
+
+    @field_validator("slug")
+    @classmethod
+    def _slug(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        cleaned = value.strip().lower()
+        if not is_valid_slug(cleaned):
+            raise ValueError("Slug may only contain lowercase letters, digits and hyphens")
+        return cleaned
+
+    @field_validator("landing_gallery_urls")
+    @classmethod
+    def _gallery(cls, value: Optional[List[str]]) -> Optional[List[str]]:
+        return clean_gallery(value)
 
 
 class CollegeUpdate(BaseModel):
@@ -37,6 +61,14 @@ class CollegeUpdate(BaseModel):
     state: Optional[str] = Field(default=None, min_length=1, max_length=80)
     type: Optional[Literal["private", "government", "deemed"]] = None
     active: Optional[bool] = None
+    landing_hero_image_url: Optional[str] = Field(default=None, max_length=500)
+    landing_description: Optional[str] = Field(default=None, max_length=2000)
+    landing_gallery_urls: Optional[List[str]] = Field(default=None, max_length=10)
+
+    @field_validator("landing_gallery_urls")
+    @classmethod
+    def _gallery(cls, value: Optional[List[str]]) -> Optional[List[str]]:
+        return clean_gallery(value)
 
 
 class CentreCreate(BaseModel):
@@ -118,15 +150,41 @@ async def list_colleges(db: AsyncSession = Depends(get_db)):
 @router.post("/colleges", status_code=201)
 async def create_college(body: CollegeCreate, db: AsyncSession = Depends(get_db)):
     college_id = uuid4()
-    await db.execute(
-        text(
-            """
-            INSERT INTO colleges (id, name, location, city, state, type, active)
-            VALUES (:id, :name, :location, :city, :state, :type, true)
-            """
-        ),
-        {"id": college_id, **body.model_dump()},
-    )
+    # An explicit slug wins; otherwise derive one from the name. Either way a
+    # same-named second college collides on the unique constraint, which is a
+    # 409 (supply an explicit slug) rather than a 500.
+    slug = body.slug or make_slug(body.name)
+    try:
+        await db.execute(
+            text(
+                """
+                INSERT INTO colleges
+                    (id, name, slug, location, city, state, type, active,
+                     landing_hero_image_url, landing_description,
+                     landing_gallery_urls)
+                VALUES (:id, :name, :slug, :location, :city, :state, :type, true,
+                        :hero, :description, :gallery)
+                """
+            ),
+            {
+                "id": college_id,
+                "name": body.name,
+                "slug": slug,
+                "location": body.location,
+                "city": body.city,
+                "state": body.state,
+                "type": body.type,
+                "hero": body.landing_hero_image_url,
+                "description": body.landing_description,
+                "gallery": dump_gallery(body.landing_gallery_urls),
+            },
+        )
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="A college with that slug already exists. Supply an explicit slug.",
+        )
     await _audit(db, "college.created", "college", college_id)
     await db.commit()
     return {"id": str(college_id)}
@@ -137,7 +195,9 @@ async def get_college(college_id: UUID, db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         text(
             """
-            SELECT c.id, c.name, c.location, c.city, c.state, c.type, c.active,
+            SELECT c.id, c.name, c.slug, c.location, c.city, c.state, c.type, c.active,
+                   c.landing_hero_image_url, c.landing_description,
+                   c.landing_gallery_urls,
                    COALESCE(
                        json_agg(
                            json_build_object(
@@ -178,7 +238,9 @@ async def get_college(college_id: UUID, db: AsyncSession = Depends(get_db)):
         ),
         {"cid": college_id},
     )
-    return {**dict(row._mapping), "staff": [dict(r._mapping) for r in staff.fetchall()]}
+    detail = dict(row._mapping)
+    detail["landing_gallery_urls"] = parse_gallery(detail.get("landing_gallery_urls"))
+    return {**detail, "staff": [dict(r._mapping) for r in staff.fetchall()]}
 
 
 @router.patch("/colleges/{college_id}")
@@ -189,8 +251,20 @@ async def update_college(
     if not updates:
         raise HTTPException(status_code=400, detail="Nothing to update")
 
-    allowed = ("name", "location", "city", "state", "type", "active")
+    allowed = (
+        "name",
+        "location",
+        "city",
+        "state",
+        "type",
+        "active",
+        "landing_hero_image_url",
+        "landing_description",
+        "landing_gallery_urls",
+    )
     fields = [k for k in allowed if k in updates]
+    if "landing_gallery_urls" in updates:
+        updates["landing_gallery_urls"] = dump_gallery(updates["landing_gallery_urls"])
     assignments = ", ".join(f"{k} = :{k}" for k in fields)
 
     result = await db.execute(
@@ -433,15 +507,24 @@ async def update_user(
         raise HTTPException(status_code=400, detail="Nothing to update")
 
     firebase_uid = None
+    found_role = None
+    found_college_id = None
+    found_centre_id = None
     for table, role in (
         ("college_admins", "college"),
         ("coaching_center_admins", "coaching"),
         ("platform_users", "admin"),
     ):
+        org_columns = ""
+        if table == "college_admins":
+            org_columns = ", college_id"
+        elif table == "coaching_center_admins":
+            org_columns = ", coaching_center_id"
+
         result = await db.execute(
             text(
                 f"UPDATE {table} SET active = :active WHERE id = :uid "
-                "RETURNING firebase_uid"
+                f"RETURNING firebase_uid{org_columns}"
             ),
             {"active": body.active, "uid": user_id},
         )
@@ -449,15 +532,29 @@ async def update_user(
         if row:
             firebase_uid = row[0]
             found_role = role
+            if table == "college_admins":
+                found_college_id = row[1]
+            elif table == "coaching_center_admins":
+                found_centre_id = row[1]
             break
 
     if not firebase_uid:
         await db.rollback()
         raise HTTPException(status_code=404, detail="User not found")
 
+    # firebase_uid is only set alongside found_role, so this is provably set here.
+    assert found_role is not None
+
     if body.active:
-        # Re-granting needs the organisation back, which lives in the row we
-        # just touched. Left to the create flow rather than guessed here.
+        # Restoring must put the role claim back: revoke_access cleared it, and a
+        # restor-person without a claim is an account that can log in and be
+        # bounced out of every portal.
+        assign_role(
+            firebase_uid,
+            found_role,
+            college_id=str(found_college_id) if found_college_id else None,
+            coaching_centre_id=str(found_centre_id) if found_centre_id else None,
+        )
         await _audit(db, "user.restored", "user", user_id)
     else:
         revoke_access(firebase_uid)

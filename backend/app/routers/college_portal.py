@@ -10,11 +10,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from uuid import UUID, uuid4
-from typing import Literal, Optional
-from pydantic import BaseModel, Field
+from typing import List, Literal, Optional
+from pydantic import BaseModel, Field, field_validator
 
 from app.db.connection import get_db
 from app.middleware.auth import current_college_id, require_roles
+from app.models.college import clean_gallery, dump_gallery, parse_gallery
 
 router = APIRouter()
 
@@ -34,13 +35,14 @@ class CourseCreate(BaseModel):
     stream: Literal["UG", "PG"]
     duration_years: Optional[int] = Field(default=None, ge=1, le=7)
     seats: int = Field(ge=1, le=100_000)
-    # Paise on the wire, rupees in the column.
-    application_fee: int = Field(ge=100, le=10_000_000)
+    # Paise on the wire, rupees in the column. The `% 100 == 0` guard stops a
+    # sub-rupee amount from being silently floored to a different fee on storage.
+    application_fee: int = Field(ge=100, le=10_000_000, multiple_of=100)
 
 
 class CourseUpdate(BaseModel):
     seats: Optional[int] = Field(default=None, ge=1, le=100_000)
-    application_fee: Optional[int] = Field(default=None, ge=100, le=10_000_000)
+    application_fee: Optional[int] = Field(default=None, ge=100, le=10_000_000, multiple_of=100)
     active: Optional[bool] = None
 
 
@@ -53,6 +55,16 @@ class ProfileUpdate(BaseModel):
     location: Optional[str] = Field(default=None, max_length=300)
     city: Optional[str] = Field(default=None, max_length=80)
     state: Optional[str] = Field(default=None, max_length=80)
+    # The public landing page. A college edits its own marketing copy here;
+    # the platform decides when it goes live by toggling `active` in admin.
+    landing_hero_image_url: Optional[str] = Field(default=None, max_length=500)
+    landing_description: Optional[str] = Field(default=None, max_length=2000)
+    landing_gallery_urls: Optional[List[str]] = Field(default=None, max_length=10)
+
+    @field_validator("landing_gallery_urls")
+    @classmethod
+    def _gallery(cls, value: Optional[List[str]]) -> Optional[List[str]]:
+        return clean_gallery(value)
 
 
 @router.get("/dashboard")
@@ -371,14 +383,18 @@ async def get_profile(
 ):
     result = await db.execute(
         text(
-            "SELECT name, location, city, state, type FROM colleges WHERE id = :cid"
+            "SELECT name, location, city, state, type, "
+            "landing_hero_image_url, landing_description, landing_gallery_urls "
+            "FROM colleges WHERE id = :cid"
         ),
         {"cid": college_id},
     )
     row = result.fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="College not found")
-    return dict(row._mapping)
+    data = dict(row._mapping)
+    data["landing_gallery_urls"] = parse_gallery(data.get("landing_gallery_urls"))
+    return data
 
 
 @router.patch("/profile")
@@ -395,8 +411,17 @@ async def update_profile(
     if not updates:
         raise HTTPException(status_code=400, detail="Nothing to update")
 
-    allowed = ("location", "city", "state")
+    allowed = (
+        "location",
+        "city",
+        "state",
+        "landing_hero_image_url",
+        "landing_description",
+        "landing_gallery_urls",
+    )
     fields = [k for k in allowed if k in updates]
+    if "landing_gallery_urls" in updates:
+        updates["landing_gallery_urls"] = dump_gallery(updates["landing_gallery_urls"])
     assignments = ", ".join(f"{k} = :{k}" for k in fields)
 
     await db.execute(

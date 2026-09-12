@@ -1,4 +1,5 @@
 import Badge from '@/components/ui/Badge';
+import Button from '@/components/ui/Button';
 import {
   APPLICATION_STATUS_LABEL,
   APPLICATION_STATUS_TONE,
@@ -7,10 +8,19 @@ import {
 } from '@/lib/format';
 import type { Application } from '@/lib/types';
 
+/** A student may withdraw only while a college has not yet decided. */
+function canWithdraw(status: Application['status']): boolean {
+  return status === 'payment_received' || status === 'under_review';
+}
+
 export default function ApplicationStatusCard({
   application,
+  onWithdraw,
+  withdrawing,
 }: {
   application: Application;
+  onWithdraw?: (id: string) => void;
+  withdrawing?: boolean;
 }) {
   return (
     <article className="rounded-lg border border-[var(--line)] bg-[var(--surface-raised)] p-5">
@@ -48,6 +58,19 @@ export default function ApplicationStatusCard({
           <dd className="mt-0.5">{formatDate(application.updated_at)}</dd>
         </div>
       </dl>
+
+      {onWithdraw && canWithdraw(application.status) && (
+        <div className="mt-4 flex justify-end border-t border-[var(--line)] pt-4">
+          <Button
+            variant="secondary"
+            size="sm"
+            loading={withdrawing}
+            onClick={() => onWithdraw(application.id)}
+          >
+            Withdraw application
+          </Button>
+        </div>
+      )}
     </article>
   );
 }

@@ -1,16 +1,33 @@
 # Edee Apply – College-Application Platform
 
 > FastAPI service plus a Next.js frontend: student signup, college search and
-> shortlisting, Razorpay payment, and four role-based portals.
+> shortlisting, Razorpay payment, student withdrawal, coaching invites, and
+> four role-based portals.
 
 **Repository layout**
 
 ```
 backend/    FastAPI, PostgreSQL, Alembic
 frontend/   Next.js 15, TypeScript, Tailwind v4
+start.bat   Windows one-command setup and launch
 ```
 
-## Running the whole thing
+## Quick start
+
+On Windows, run:
+
+```bat
+start.bat
+```
+
+`start.bat` checks for Docker, Python, and Node; starts Docker Desktop if needed;
+removes a stale `college-platform-db` container; starts Postgres; creates
+`backend\venv` and `frontend\node_modules` only when missing; copies `.env`
+files only when missing; waits for Postgres health; runs migrations and college
+seeds; seeds demo accounts only when a Firebase service account exists; then
+opens backend and frontend server windows and waits until both respond.
+
+Manual setup:
 
 ```bash
 # 1. Database
@@ -18,18 +35,18 @@ docker compose up -d db
 
 # 2. Backend
 cd backend
-python -m venv venv && ./venv/Scripts/activate   # source venv/bin/activate on macOS/Linux
-pip install -r requirements.txt
-cp .env.example .env                             # fill in Firebase and Razorpay
-alembic upgrade head
-python -m seeds.colleges
-python -m seeds.users                            # one account per role
-uvicorn app.main:app --reload
+python -m venv venv
+venv\Scripts\python -m pip install -r requirements.txt
+copy .env.example .env                             # fill in Firebase and Razorpay
+venv\Scripts\python -m alembic upgrade head
+venv\Scripts\python -m seeds.colleges
+venv\Scripts\python -m seeds.users                 # only with a Firebase service account
+venv\Scripts\python -m uvicorn app.main:app --reload --port 8000
 
 # 3. Frontend
-cd ../frontend
-npm install
-cp .env.local.example .env.local                 # fill in the Firebase web config
+cd ..\frontend
+npm ci
+copy .env.local.example .env.local                 # fill in the Firebase web config
 npm run dev
 ```
 
@@ -42,8 +59,13 @@ npm run dev
 | Admin portal | http://localhost:3000/admin/dashboard |
 | API | http://localhost:8000 |
 | API docs | http://localhost:8000/docs (hidden in production) |
+| Docker Postgres | 127.0.0.1:5433 |
 
-Or `docker compose up` for all three.
+The Docker database intentionally uses host port `5433`, not `5432`, so it does
+not collide with a locally installed PostgreSQL. Inside Docker Compose, backend
+services still reach it as `db:5432`; local development uses `localhost:5433`.
+
+`docker compose up` starts all three services from the repository root.
 
 ## How the two halves fit together
 
@@ -80,84 +102,196 @@ integration, including two issues that were giving away free applications.
 | **Auth** | Firebase Admin SDK (JWT verification) |
 | **Payments** | Razorpay (order creation + webhook) |
 | **Containerisation** | Docker + docker‑compose |
-| **Testing** | pytest / httpx (async) |
-| **Code quality** | black, ruff |
+| **Testing** | pytest / httpx (backend, 139 tests) · Vitest (frontend, 57 tests) |
+| **Code quality** | black, ruff, ESLint, `tsc --noEmit` |
 
 ---
 
-## 📂 Repository Layout (monorepo‑style)
+## 📂 Repository Layout
 
-edee-apply/
-├─ backend/                # FastAPI service (this folder)
-│   ├─ app/
-│   │   ├─ core/          # settings (pydantic‑settings)
-│   │   ├─ db/            # SQLAlchemy async engine & Base
-│   │   ├─ middleware/    # Firebase JWT auth + role helpers
-│   │   ├─ models/        # Pydantic request/response schemas
-│   │   ├─ routers/       # /students, /colleges, /shortlists, /payments
-│   │   ├─ services/      # Razorpay client, Firebase init
-│   │   └─ main.py        # FastAPI entry point
-│   ├─ migrations/        # Alembic scripts (phase‑1 schema)
-│   ├─ seeds/             # python seeds/colleges.py
-│   ├─ tests/             # pytest suite
-│   ├─ Dockerfile
-│   ├─ requirements.txt
-│   ├─ requirements-dev.txt
-│   └─ .env.example
-├─ docker-compose.yml      # postgres + backend
-└─ README.md               # you are here
+```text
+edee/
+├─ backend/
+│  ├─ app/
+│  │  ├─ core/          # settings, slug helper
+│  │  ├─ db/            # async engine/session factory, ORM Base
+│  │  ├─ middleware/    # Firebase JWT auth + role/scope helpers
+│  │  ├─ models/        # ORM tables + Pydantic request/response schemas
+│  │  ├─ routers/       # students, colleges, shortlists, payments, portals
+│  │  ├─ services/      # Razorpay client, Firebase role claims
+│  │  └─ main.py        # FastAPI entry point
+│  ├─ migrations/        # Alembic 001–002
+│  ├─ seeds/             # colleges, demo role accounts
+│  ├─ tests/             # pytest suite
+│  ├─ Dockerfile
+│  ├─ requirements.txt
+│  ├─ requirements-dev.txt
+│  └─ .env.example
+├─ frontend/             # Next.js portals, components, hooks, tests
+├─ docker-compose.yml    # Postgres + backend + frontend
+├─ start.bat             # Windows setup and launch
+└─ README.md             # you are here
+```
 
 ---
 
-## ⚙️  Local Development (Docker‑first)
+## ⚙️ Local development and verification
 
-> **All commands are run from the repository root** (`edee-apply/`).
+All Compose commands run from the repository root.
 
-### 1. Clone & configure secrets
 ```bash
-git clone https://github.com/<your‑github‑username>/edee-apply.git
-cd edee-apply
-
-# copy example env and fill in dummy / real keys
-cp backend/.env.example backend/.env
-# edit backend/.env → add FIREBASE_SERVICE_ACCOUNT_PATH, RAZORPAY_* values
-2. Spin up the stack
-docker compose up -d --build          # builds backend image, starts Postgres + API
-docker compose ps                     # both services should show “Up / healthy”
-3. Run DB migrations & seed data
-docker compose exec backend alembic -c /app/alembic.ini upgrade head
-docker compose exec backend python seeds/colleges.py
-4. Verify
+docker compose up -d --build
+docker compose ps
 curl http://localhost:8000/health          # → {"status":"ok"}
-open http://localhost:8000/docs            # Swagger UI
-open http://localhost:8000/redoc           # ReDoc
-🧪  Running Tests
-docker compose exec backend pytest -q
-# or with coverage
-docker compose exec backend pytest --cov=app --cov-report=term-missing
-📦  Building a Production Image
-# builds a lean image (no dev deps, no reload)
-docker build -t ghcr.io/<your‑github‑username>/edee-apply-backend:latest -f backend/Dockerfile backend
-docker push ghcr.io/<your‑github‑username>/edee-apply-backend:latest
-🔐  Environment Variables (backend/.env)
-Variable	Description
-DATABASE_URL	Async Postgres DSN
-FIREBASE_SERVICE_ACCOUNT_PATH	Path to service‑account JSON (mounted in container)
-RAZORPAY_KEY_ID	Razorpay Key ID
-RAZORPAY_KEY_SECRET	Razorpay Key Secret
-RAZORPAY_WEBHOOK_SECRET	Secret used to verify webhook signatures
-ENVIRONMENT	development
-Never commit real keys – keep them only in .env (git‑ignored) or in your CI/CD secret store.
-📚  API Overview (Phase 1)
-Area	Endpoints
-Students	POST /students/ – create profile <br> GET /students/me – current profile
-Colleges	GET /colleges/ – list + filters <br> GET /colleges/{id} – detail
-Shortlists	GET /shortlists/ – my shortlist <br> POST /shortlists/ – add <br> DELETE /shortlists/{id} – remove
-Payments	POST /payments/create-order – Razorpay order <br> POST /payments/webhook – Razorpay callback
-Full OpenAPI spec is served at /openapi.json (Swagger UI at /docs).
-🤝  Contributing
-1. Fork the repo.  
-2. Create a feature branch (git checkout -b feat/awesome).  
-3. Run black . && ruff . before committing.  
-4. Ensure pytest passes.  
-5. Open a Pull Request – CI will run lint + tests automatically.
+```
+
+Backend checks:
+
+```bash
+cd backend
+venv\Scripts\python -m pytest -q
+```
+
+Frontend checks:
+
+```bash
+cd ../frontend
+npm run test
+npm run typecheck
+npm run lint
+```
+
+Database-backed backend tests use `college_platform_test` on `localhost:5433`
+by default and rebuild an isolated schema for each test.
+
+## 📦 Production
+
+Development uses `docker-compose.yml` alone. Production adds the overlay,
+which switches to the prod Dockerfiles, drops bind mounts and `--reload`,
+restarts services unless stopped, and health-checks the backend and frontend:
+
+```bash
+cp .env.prod.example .env   # repo root; every value is required
+# place backend/firebase-service-account.json (gitignored, never committed)
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+docker compose -f docker-compose.yml -f docker-compose.prod.yml exec backend \
+  alembic -c /app/alembic.ini upgrade head
+```
+
+`ENVIRONMENT=production` hides `/docs`, enables HSTS, and silences SQL echo.
+Before pointing traffic at it, work through this list:
+
+- **TLS first.** HSTS tells browsers to refuse plain HTTP, so terminate TLS at
+  a reverse proxy in front of `127.0.0.1:8000` (API) and `127.0.0.1:3000`
+  (web). Without a proxy the HSTS header is a lie.
+- **CORS.** `CORS_ORIGINS` must be the exact production origin(s). The dev
+  default (`localhost:3000`) would break the live site.
+- **Razorpay.** In the Razorpay dashboard, point the webhook at
+  `https://<api-host>/payments/webhook` and set `RAZORPAY_WEBHOOK_SECRET` to
+  the same secret. The handler rejects amount mismatches and replays, but it
+  can only verify what you configured.
+- **Firebase.** Add the production web origin to Authorized Domains, and keep
+  the service-account JSON out of git (it is ignored) and readable only by
+  the backend container.
+- **Frontend rebuilds.** `NEXT_PUBLIC_*` values bake in at image build time.
+  Changing the API URL or Firebase project means rebuilding the frontend
+  image, not just restarting it.
+- **Database.** `pgdata` holds everything; back it up
+  (`docker exec college-platform-db pg_dump -U dev college_platform > backup.sql`)
+  and practice restoring it before you need to. Run migrations explicitly as
+  above — the app never migrates itself on boot.
+- **Rate limits.** Signup (5/min) and order creation (10/min) are limited
+  per client IP in memory, which is exact for one backend replica. Past one
+  replica, enforce limits at the ingress or move slowapi to Redis; behind a
+  proxy, run uvicorn with `--proxy-headers` so the limiter sees real client
+  IPs. The Razorpay webhook is intentionally unlimited (the provider retries).
+- **Workers.** The image runs one uvicorn worker. To scale, add `--workers N`
+  to the backend command; each worker owns its own small pool
+  (`app/db/connection.py`), so grow Postgres `max_connections` to match.
+- **CI.** `.github/workflows/ci.yml` runs backend tests against Postgres 16,
+  frontend tests/typecheck/lint, and builds both images plus a prod compose
+  validation on every push and PR.
+
+## 🚢 Releases and deploys
+
+- **CD** (`.github/workflows/cd.yml`) builds versioned backend/frontend images
+  on every push to `main` and every `v*` tag and pushes them to GHCR. The
+  frontend build needs seven repository **Variables** (`NEXT_PUBLIC_API_URL`
+  plus the six `NEXT_PUBLIC_FIREBASE_*` values); the job fails with their
+  names if any is unset.
+- **Deploy** (`.github/workflows/deploy.yml`) is manual: pick an image tag and
+  run it. It copies the compose files to the server, pulls the tag, migrates,
+  and restarts. One-time setup and required secrets are documented at the top
+  of that file; prefer holding the secrets in a `production` environment with
+  required reviewers.
+- **Rollback** is choosing the previous tag and running Deploy again —
+  migrations only ever move forward, so keep them backwards-compatible
+  (additive changes; no destructive rewrites without a plan).
+
+## 📖 Dev-guide conformance
+
+`college-platform-dev-guide (1).md` is the original spec; the code follows it
+except where review found a better answer:
+
+| Guide | Implementation |
+|---|---|
+| Route groups `(student)` / `(platform-admin)` / … and roles `platform_admin` / … | `/student`, `/admin`, `/college`, `/coaching` with `student`, `admin`, `college`, `coaching` — same four portals, shorter names |
+| One `/login` per portal | Single `/login`; post-auth routing by role claim lands each user in exactly one portal |
+| Scope from a per-request DB lookup (`get_admissions_scope`) | Scope from verified token claims, with `check_revoked` and claim-clearing revocation; portal routers take no org id from callers |
+| `NEXT_PUBLIC_RAZORPAY_KEY_ID` in frontend env | Key id comes from `POST /payments/create-order` — one source of truth, survives rotation |
+| Python 3.11 / Node 20 / DB on 5432 | Python 3.12 / Node 22 / Docker DB on host 5433 (avoids local Postgres clashes) |
+| `tests/mock-service-account.json` | Tests use an intentionally nonexistent path so a run can never touch real credentials |
+| Phase-1 routers as sketched | Hardened per `SECURITY-FIXES.md` (order items, amount checks, idempotency, transition table, invite redemption, withdrawal) |
+
+## 🔐 Environment variables
+
+Backend `.env`:
+
+```text
+DATABASE_URL=postgresql+asyncpg://dev:dev@localhost:5433/college_platform
+FIREBASE_SERVICE_ACCOUNT_PATH=./firebase-service-account.json
+RAZORPAY_KEY_ID=
+RAZORPAY_KEY_SECRET=
+RAZORPAY_WEBHOOK_SECRET=
+CORS_ORIGINS=http://localhost:3000
+ENVIRONMENT=development
+```
+
+Frontend `.env.local` only contains publishable `NEXT_PUBLIC_*` values. Never put
+Razorpay secrets or Firebase service-account credentials there.
+
+## 📚 API overview
+
+Students:
+
+- `POST /students/` — create profile; optional `invite_code` links a coaching centre
+- `GET /students/me`, `PATCH /students/me`
+- `GET /students/me/applications`
+- `POST /students/me/applications/{application_id}/withdraw`
+
+Browse and shortlist:
+
+- `GET /colleges/`, `GET /colleges/{college_id}`
+- `GET /colleges/by-slug/{slug}` — public landing-page lookup, no login
+- `GET /shortlists/`, `POST /shortlists/`, `DELETE /shortlists/{shortlist_id}`
+
+Payments:
+
+- `POST /payments/create-order`
+- `POST /payments/verify`
+- `POST /payments/webhook`
+
+Portals:
+
+- College: `/college/dashboard`, `/college/courses/*`, `/college/applications/*`, `/college/profile`
+- Coaching: `/coaching/dashboard`, `/coaching/students/*`, `/coaching/invites`, `/coaching/profile`
+- Admin: `/admin/dashboard`, `/admin/colleges/*`, `/admin/coaching-centres`, `/admin/students`, `/admin/users`, `/admin/payments`, `/admin/audit`
+
+Full OpenAPI is served at `/openapi.json`; Swagger UI is at `/docs` outside production.
+
+## 🤝 Contributing
+
+1. Fork the repo.
+2. Create a feature branch (`git checkout -b feat/awesome`).
+3. Run `ruff check` (backend), backend `pytest -q`, frontend `npm run test`, `npm run typecheck`, and `npm run lint`.
+4. Open a pull request; CI should run lint and tests.

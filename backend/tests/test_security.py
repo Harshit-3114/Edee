@@ -266,5 +266,67 @@ def test_missing_token_is_401_not_403():
         assert res.headers.get("WWW-Authenticate") == "Bearer"
 
 
+def test_landing_lookup_is_public_to_everyone():
+    """
+    The college landing page is top-of-funnel: it must answer for every role
+    and for no token at all, never with 401/403. (Unknown slugs 404, which is
+    also not an auth failure.)
+    """
+    for role in ("student", "college", "coaching", "admin"):
+        client = client_as(role, college_id=COLLEGE_ID, coaching_centre_id=CENTRE_ID)
+        # Reaching the stub database (a 500 here) proves the point: no auth
+        # gate fired. A guard failure would be 401 or 403.
+        assert client.get("/colleges/by-slug/nowhere").status_code not in (
+            401,
+            403,
+        ), role
+
+    # No token at all. The stub database raises if reached, which surfaces as
+    # a 500 here — the assertion that matters is "not 401": no login required.
+    bare = TestClient(app, raise_server_exceptions=False)
+    assert bare.get("/colleges/by-slug/nowhere").status_code != 401
+
+
 def test_health_needs_no_token():
     assert TestClient(app).get("/health").status_code == 200
+
+
+# --------------------------------------------------------------------------
+# Rate limiting
+# --------------------------------------------------------------------------
+
+
+def test_rate_limiter_returns_429_once_the_budget_is_spent():
+    """
+    The `limited()` helper is a no-op under pytest (see app/core/rate_limit.py),
+    so this exercises a throwaway app with a real limiter instead. It pins the
+    slowapi/Starlette contract: if a library upgrade changes how limits attach
+    to routes, this fails loudly rather than silently unprotecting signup and
+    order creation in production.
+    """
+    from fastapi import FastAPI, Request
+    from fastapi.responses import JSONResponse
+    from slowapi import Limiter
+    from slowapi.errors import RateLimitExceeded
+    from slowapi.util import get_remote_address
+
+    probe_limiter = Limiter(key_func=get_remote_address)
+    probe = FastAPI()
+    probe.state.limiter = probe_limiter
+
+    async def too_many(request: Request, exc: Exception) -> JSONResponse:
+        return JSONResponse(status_code=429, content={"detail": "slow down"})
+
+    probe.add_exception_handler(RateLimitExceeded, too_many)
+
+    @probe.get("/probe")
+    @probe_limiter.limit("2/minute")
+    async def _probe(request: Request):
+        return {"ok": True}
+
+    client = TestClient(probe, raise_server_exceptions=False)
+    assert client.get("/probe").status_code == 200
+    assert client.get("/probe").status_code == 200
+    limited = client.get("/probe")
+    assert limited.status_code == 429
+    assert limited.json() == {"detail": "slow down"}

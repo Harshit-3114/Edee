@@ -10,6 +10,7 @@ from app.services.razorpay import (
     verify_webhook_signature,
 )
 from app.core.config import settings
+from app.core.rate_limit import limited
 import uuid
 import json
 import logging
@@ -33,7 +34,9 @@ async def _student_id(user: dict, db: AsyncSession) -> uuid.UUID:
 
 
 @router.post("/create-order", response_model=CreateOrderResponse)
+@limited("10/minute")
 async def create_order(
+    request: Request,
     body: CreateOrder,
     user: dict = Depends(require_roles("student")),
     db: AsyncSession = Depends(get_db),
@@ -127,8 +130,8 @@ async def create_order(
     await db.execute(
         text(
             """
-            INSERT INTO orders (id, student_id, razorpay_order_id, amount, status)
-            VALUES (:id, :student_id, :razorpay_order_id, :amount, 'created')
+            INSERT INTO orders (id, student_id, razorpay_order_id, amount, currency, status)
+            VALUES (:id, :student_id, :razorpay_order_id, :amount, 'INR', 'created')
             """
         ),
         {
@@ -259,13 +262,20 @@ async def razorpay_webhook(
     if not order:
         await db.rollback()
         logger.warning("Webhook for unknown order %s", razorpay_order_id)
+        # 200 keeps Razorpay from hammering a second account's-order-id forever;
+        # there is nothing to reconcile here.
         return {"status": "order_not_found"}
 
     # What Razorpay says was paid must match what we asked for. A mismatch is
     # either a bug on our side or someone paying a different amount against a
-    # known order id. Either way it does not get to create applications.
+    # known order id. Either way it does not get to create applications, and the
+    # order is marked failed so it can never be repriced or reused.
     if paid_amount != order.amount:
-        await db.rollback()
+        await db.execute(
+            text("UPDATE orders SET status = 'failed' WHERE id = :id"),
+            {"id": order.id},
+        )
+        await db.commit()
         logger.error(
             "Amount mismatch on order %s: paid %s, expected %s",
             razorpay_order_id,
@@ -279,8 +289,8 @@ async def razorpay_webhook(
         text(
             """
             INSERT INTO payments
-                (id, order_id, razorpay_payment_id, razorpay_signature, amount)
-            VALUES (:id, :order_id, :rz_payment_id, :signature, :amount)
+                (id, order_id, razorpay_payment_id, razorpay_signature, amount, status)
+            VALUES (:id, :order_id, :rz_payment_id, :signature, :amount, 'captured')
             """
         ),
         {
@@ -305,7 +315,10 @@ async def razorpay_webhook(
     )
     rows = items.fetchall()
     if not rows:
-        await db.rollback()
+        await db.execute(
+            text("UPDATE orders SET status = 'failed' WHERE id = :id"), {"id": order.id}
+        )
+        await db.commit()
         logger.error("Order %s has no order_items; refusing to guess", order.id)
         return {"status": "no_order_items"}
 

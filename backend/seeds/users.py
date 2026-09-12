@@ -20,7 +20,7 @@ from sqlalchemy import text
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.core.config import settings  # noqa: E402
-from app.db.connection import AsyncSessionLocal  # noqa: E402
+from app.db.connection import get_session_factory  # noqa: E402
 from app.services.firebase import assign_role  # noqa: E402
 from app.middleware.auth import _firebase_app  # noqa: E402
 
@@ -41,7 +41,7 @@ async def main() -> None:
 
     app = _firebase_app()
 
-    async with AsyncSessionLocal() as db:
+    async with get_session_factory()() as db:
         college = (
             await db.execute(text("SELECT id, name FROM colleges ORDER BY name LIMIT 1"))
         ).fetchone()

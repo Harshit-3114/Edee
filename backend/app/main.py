@@ -2,9 +2,12 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
+from slowapi.errors import RateLimitExceeded
+from starlette.types import ASGIApp, Receive, Scope, Send
 import logging
 
 from app.core.config import settings
+from app.core.rate_limit import limiter, rate_limit_handler
 from app.db.connection import init_db
 from app.routers import (
     students,
@@ -48,24 +51,44 @@ app.add_middleware(
     max_age=600,
 )
 
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, rate_limit_handler)
 
-@app.middleware("http")
-async def security_headers(request: Request, call_next):
+
+class SecurityHeadersMiddleware:
     """
     Baseline headers. This API returns JSON rather than markup, so the job is
     mostly to stop a browser from being clever with a response it should just
     hand to fetch().
+
+    Written as pure ASGI (not FastAPI's BaseHTTPMiddleware): BaseHTTPMiddleware
+    runs the downstream app in a separate anyio task group and event loop,
+    which tears asyncpg apart under the test client. This runs inline in the
+    same loop as the request.
     """
-    response = await call_next(request)
-    response.headers["X-Content-Type-Options"] = "nosniff"
-    response.headers["X-Frame-Options"] = "DENY"
-    response.headers["Referrer-Policy"] = "no-referrer"
-    response.headers["Cache-Control"] = "no-store"
-    if settings.is_production:
-        response.headers["Strict-Transport-Security"] = (
-            "max-age=31536000; includeSubDomains"
-        )
-    return response
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        async def send_headers(message):
+            if message["type"] == "http.response.start":
+                headers = dict(message.get("headers", []))
+                headers[b"x-content-type-options"] = b"nosniff"
+                headers[b"x-frame-options"] = b"DENY"
+                headers[b"referrer-policy"] = b"no-referrer"
+                headers[b"cache-control"] = b"no-store"
+                if settings.is_production:
+                    headers[b"strict-transport-security"] = (
+                        b"max-age=31536000; includeSubDomains"
+                    )
+                message["headers"] = list(headers.items())
+            await send(message)
+
+        await self.app(scope, receive, send_headers)
+
+
+app.add_middleware(SecurityHeadersMiddleware)
 
 
 @app.exception_handler(Exception)

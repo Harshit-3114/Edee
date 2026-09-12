@@ -1,10 +1,15 @@
 import type { NextConfig } from 'next';
+import path from 'node:path';
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
 
   // Standalone output keeps the production Docker image small.
   output: 'standalone',
+
+  // A stray lockfile above this directory confuses workspace-root inference;
+  // pin tracing to the frontend directory as the warning itself suggests.
+  outputFileTracingRoot: path.join(__dirname),
 
   images: {
     remotePatterns: [

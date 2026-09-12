@@ -28,6 +28,7 @@ export default function SignupClient() {
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [stream, setStream] = useState<Stream | ''>('');
+  const [inviteCode, setInviteCode] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -66,6 +67,7 @@ export default function SignupClient() {
         email: email.trim().toLowerCase(),
         phone: phone.replace(/\D/g, '').slice(-10),
         stream,
+        invite_code: inviteCode.trim() || null,
       });
       // The backend just granted the student claim. Refresh so middleware and
       // RoleGate can both see it, then go to the portal.
@@ -147,6 +149,21 @@ export default function SignupClient() {
               <option value="UG">Undergraduate</option>
               <option value="PG">Postgraduate</option>
             </Select>
+          )}
+        </Field>
+
+        <Field
+          label="Coaching invite code"
+          hint="Optional. Links you to a coaching centre that invited you."
+        >
+          {(fieldProps) => (
+            <Input
+              {...fieldProps}
+              value={inviteCode}
+              onChange={(event) => setInviteCode(event.target.value.toUpperCase())}
+              autoComplete="off"
+              placeholder="e.g. X9K2M7QPRT"
+            />
           )}
         </Field>
 

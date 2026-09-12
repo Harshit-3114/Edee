@@ -1,4 +1,6 @@
 from httpx import AsyncClient
+from sqlalchemy import text
+import uuid
 
 
 class TestStudents:
@@ -143,3 +145,91 @@ class TestStudents:
     ):
         auth_as("uid-no-profile", role="student")
         assert (await client.get("/students/me")).status_code == 404
+
+    async def test_signup_redeems_a_coaching_invite(
+        self, client: AsyncClient, auth_as, db_session
+    ):
+        """An invite code links a new student to the issuing centre."""
+        centre_id = uuid.uuid4()
+        await db_session.execute(
+            text(
+                """
+                INSERT INTO coaching_centers (id, name, city, state, active)
+                VALUES (:id, 'Allen', 'Kota', 'Rajasthan', true)
+                """
+            ),
+            {"id": centre_id},
+        )
+        await db_session.execute(
+            text(
+                """
+                INSERT INTO coaching_invites
+                    (id, coaching_center_id, code, max_uses, uses)
+                VALUES (:id, :cid, 'ABCCODE123', 5, 0)
+                """
+            ),
+            {"id": uuid.uuid4(), "cid": centre_id},
+        )
+        await db_session.commit()
+
+        auth_as("uid-invite", role="student")
+        response = await client.post(
+            "/students/",
+            json={
+                "name": "Invited Person",
+                "email": "invited@example.com",
+                "phone": "9876500004",
+                "stream": "UG",
+                "invite_code": "abccode123",
+            },
+        )
+        assert response.status_code == 201
+
+        link = (
+            await db_session.execute(
+                text(
+                    "SELECT coaching_center_id FROM student_coaching_links "
+                    "WHERE student_id = (SELECT id FROM students WHERE firebase_uid = 'uid-invite')"
+                )
+            )
+        ).fetchone()
+        assert link is not None
+        assert str(link[0]) == str(centre_id)
+
+    async def test_signup_rejects_an_exhausted_invite(
+        self, client: AsyncClient, auth_as, db_session
+    ):
+        centre_id = uuid.uuid4()
+        await db_session.execute(
+            text(
+                """
+                INSERT INTO coaching_centers (id, name, city, state, active)
+                VALUES (:id, 'Exhausted Centre', 'Kota', 'Rajasthan', true)
+                """
+            ),
+            {"id": centre_id},
+        )
+        await db_session.execute(
+            text(
+                """
+                INSERT INTO coaching_invites
+                    (id, coaching_center_id, code, max_uses, uses)
+                VALUES (:id, :cid, 'FULLCODE99', 1, 1)
+                """
+            ),
+            {"id": uuid.uuid4(), "cid": centre_id},
+        )
+        await db_session.commit()
+
+        auth_as("uid-exhausted", role="student")
+        response = await client.post(
+            "/students/",
+            json={
+                "name": "Late Person",
+                "email": "late@example.com",
+                "phone": "9876500005",
+                "stream": "UG",
+                "invite_code": "FULLCODE99",
+            },
+        )
+        assert response.status_code == 400

@@ -1,0 +1,30 @@
+# Never bake secrets or local state into the image.
+.env
+.env.*
+firebase-service-account.json
+*-service-account.json
+serviceAccountKey.json
+
+# Local-only artefacts.
+venv/
+env/
+ENV/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+*.log
+
+# Dev-only code. Seeds carry known passwords and must never ship; tests are
+# not needed at runtime. Migrations stay: production upgrades run from them.
+seeds/
+tests/
+
+# Editor / OS noise.
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db

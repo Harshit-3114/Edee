@@ -23,6 +23,26 @@ export interface College {
   type: CollegeType;
   active: boolean;
   courses: Course[];
+  /** Present on detail views; the list view omits landing content. */
+  slug?: string;
+  landing_hero_image_url?: string | null;
+  landing_description?: string | null;
+  landing_gallery_urls?: string[] | null;
+}
+
+/** What GET /colleges/by-slug/:slug returns. Always complete. */
+export interface CollegeLanding {
+  id: string;
+  name: string;
+  slug: string;
+  location: string;
+  city: string;
+  state: string;
+  type: CollegeType;
+  landing_hero_image_url: string | null;
+  landing_description: string | null;
+  landing_gallery_urls: string[] | null;
+  courses: Course[];
 }
 
 export interface Student {

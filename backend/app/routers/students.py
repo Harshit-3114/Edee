@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from app.db.connection import get_db
@@ -10,6 +10,8 @@ from app.models.student import (
     StudentUpdate,
 )
 from app.services.firebase import assign_role
+from app.core.rate_limit import limited
+from uuid import UUID
 import uuid
 import logging
 
@@ -19,7 +21,9 @@ router = APIRouter()
 
 
 @router.post("/", response_model=StudentResponse, status_code=201)
+@limited("5/minute")
 async def create_student(
+    request: Request,
     body: StudentCreate,
     user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -88,6 +92,38 @@ async def create_student(
     # Claim and row are written together. If the claim fails the row is rolled
     # back, rather than leaving a student who can never reach their portal.
     assign_role(firebase_uid, "student")
+
+    # A coaching invite code, if supplied, links this student to the issuing
+    # centre in the same transaction. Redeeming checks expiry and the use cap
+    # with a row lock so two students racing the last use cannot both win.
+    if body.invite_code:
+        link_result = await db.execute(
+            text(
+                """
+                WITH claimed AS (
+                    UPDATE coaching_invites
+                    SET uses = uses + 1
+                    WHERE code = :code
+                      AND (expires_at IS NULL OR expires_at > now())
+                      AND uses < max_uses
+                    RETURNING coaching_center_id
+                )
+                INSERT INTO student_coaching_links
+                    (id, student_id, coaching_center_id)
+                SELECT :link_id, :student_id, coaching_center_id FROM claimed
+                """
+            ),
+            {"code": body.invite_code, "student_id": student_id, "link_id": uuid.uuid4()},
+        )
+        if link_result.rowcount == 0:
+            # Could be unknown, expired, or exhausted. Do not distinguish in the
+            # body: the exact reason is not something a stranger needs to probe.
+            await db.rollback()
+            raise HTTPException(
+                status_code=400,
+                detail="That invite code is not valid or has already been used up",
+            )
+
     await db.commit()
 
     return {"id": student_id, "name": body.name.strip(), "stream": body.stream}
@@ -204,3 +240,60 @@ async def my_applications(
         {"uid": user["uid"]},
     )
     return [dict(row._mapping) for row in result.fetchall()]
+
+
+@router.post("/me/applications/{application_id}/withdraw")
+async def withdraw_application(
+    application_id: UUID,
+    user: dict = Depends(require_roles("student")),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Lets a student withdraw their own application.
+
+    Only the owner may withdraw, and only from a state a college has not already
+    decided. Once accepted or rejected the decision is final; a withdrawn
+    application frees the (student, college, course) slot so it is no longer
+    held open for someone who has walked away.
+    """
+    result = await db.execute(
+        text(
+            """
+            UPDATE applications a
+            SET status = 'withdrawn', status_note = NULL, updated_at = now()
+            FROM students s
+            WHERE s.id = a.student_id
+              AND s.firebase_uid = :uid
+              AND a.id = :aid
+              AND a.status IN ('payment_received', 'under_review')
+            RETURNING a.id
+            """
+        ),
+        {"uid": user["uid"], "aid": application_id},
+    )
+    row = result.fetchone()
+    if not row:
+        # Distinguish "not yours / doesn't exist" from "past the point of
+        # withdrawal" so the client can show the right message.
+        exists = await db.execute(
+            text(
+                """
+                SELECT a.status FROM applications a
+                JOIN students s ON s.id = a.student_id
+                WHERE s.firebase_uid = :uid AND a.id = :aid
+                """
+            ),
+            {"uid": user["uid"], "aid": application_id},
+        )
+        current = exists.fetchone()
+        if not current:
+            await db.rollback()
+            raise HTTPException(status_code=404, detail="Application not found")
+        await db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot withdraw an application that is already {current.status}",
+        )
+
+    await db.commit()
+    return {"status": "withdrawn"}

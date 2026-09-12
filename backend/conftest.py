@@ -11,7 +11,7 @@ Razorpay keys from a developer's .env is a test run that can move money.
 import os
 
 os.environ.setdefault(
-    "DATABASE_URL", "postgresql+asyncpg://dev:dev@localhost:5432/college_platform_test"
+    "DATABASE_URL", "postgresql+asyncpg://dev:dev@localhost:5433/college_platform_test"
 )
 os.environ.setdefault("FIREBASE_SERVICE_ACCOUNT_PATH", "./nonexistent-test.json")
 os.environ.setdefault("RAZORPAY_KEY_ID", "rzp_test_key")

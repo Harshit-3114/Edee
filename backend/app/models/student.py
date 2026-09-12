@@ -21,11 +21,23 @@ class StudentCreate(BaseModel):
     email: EmailStr
     phone: str
     stream: Literal["UG", "PG"]
+    # Optional coaching invite code, which links this student to a centre.
+    invite_code: Optional[str] = Field(default=None, max_length=20)
 
     @field_validator("phone")
     @classmethod
     def _phone(cls, value: str) -> str:
         return _clean_phone(value)
+
+    @field_validator("invite_code")
+    @classmethod
+    def _invite(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        cleaned = value.strip().upper()
+        if not cleaned:
+            return None
+        return cleaned
 
     @field_validator("name")
     @classmethod

@@ -1,0 +1,86 @@
+name: Deploy
+
+# Ships a released image tag to the production host over SSH. Manual on
+# purpose: someone picks the tag, watches the run, and owns the result.
+#
+# One-time server setup (a Linux host with Docker + Compose v2):
+#   1. mkdir -p $DEPLOY_DIR && cd $DEPLOY_DIR
+#   2. Create `.env` there from `.env.prod.example` (all values required).
+#   3. Place `backend/firebase-service-account.json` — i.e. create
+#      $DEPLOY_DIR/backend/firebase-service-account.json (the prod compose
+#      bind-mounts that exact path, read-only).
+#   4. Add the repository secrets below (or, better, a `production`
+#      environment holding them, with required reviewers).
+#
+# Required secrets:
+#   SSH_HOST, SSH_USER, SSH_KEY  — where and how to connect (port 22).
+#   DEPLOY_DIR                   — directory on the server holding .env.
+#   GHCR_USER, GHCR_TOKEN         — a token with read:packages, so the server
+#                                  can pull the private images.
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag to deploy (a branch, sha-<commit>, or version like 1.2.3)"
+        required: true
+        default: main
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Sync the compose files from a known ref, not from whatever happens
+          # to be on the server.
+          ref: ${{ github.sha }}
+
+      - name: Sync compose files to the server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          source: "docker-compose.yml,docker-compose.prod.yml"
+          target: ${{ secrets.DEPLOY_DIR }}
+
+      - name: Pull, migrate, restart
+        uses: appleboy/ssh-action@v1
+        env:
+          DEPLOY_DIR: ${{ secrets.DEPLOY_DIR }}
+          BACKEND_IMAGE: ghcr.io/${{ github.repository }}-backend:${{ inputs.image_tag }}
+          FRONTEND_IMAGE: ghcr.io/${{ github.repository }}-frontend:${{ inputs.image_tag }}
+          GHCR_USER: ${{ secrets.GHCR_USER }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          envs: DEPLOY_DIR,BACKEND_IMAGE,FRONTEND_IMAGE,GHCR_USER,GHCR_TOKEN
+          script: |
+            set -e
+            cd "$DEPLOY_DIR"
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+            # Pin the deployed tags in the server .env so a later manual
+            # `up` recreates the same images instead of drifting.
+            upsert_env() {
+              touch .env
+              if grep -q "^$1=" .env; then
+                sed -i "s|^$1=.*|$1=$2|" .env
+              else
+                printf '%s=%s\n' "$1" "$2" >> .env
+              fi
+            }
+            upsert_env BACKEND_IMAGE "$BACKEND_IMAGE"
+            upsert_env FRONTEND_IMAGE "$FRONTEND_IMAGE"
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T backend \
+              alembic -c /app/alembic.ini upgrade head
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml ps

@@ -17,6 +17,7 @@ export default function StudentDashboardPage() {
   const [applications, setApplications] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [withdrawingId, setWithdrawingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -34,6 +35,21 @@ export default function StudentDashboardPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const withdraw = useCallback(
+    async (id: string) => {
+      setWithdrawingId(id);
+      try {
+        await api.post(`/students/me/applications/${id}/withdraw`);
+        await load();
+      } catch (err) {
+        setError(apiErrorMessage(err, 'Could not withdraw that application.'));
+      } finally {
+        setWithdrawingId(null);
+      }
+    },
+    [load],
+  );
 
   return (
     <>
@@ -88,7 +104,12 @@ export default function StudentDashboardPage() {
       {!loading && !error && applications.length > 0 && (
         <div className="grid gap-4">
           {applications.map((application) => (
-            <ApplicationStatusCard key={application.id} application={application} />
+            <ApplicationStatusCard
+              key={application.id}
+              application={application}
+              onWithdraw={(id) => void withdraw(id)}
+              withdrawing={withdrawingId === application.id}
+            />
           ))}
         </div>
       )}

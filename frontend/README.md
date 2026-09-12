@@ -7,9 +7,9 @@ Four portals in one app: **student**, **college**, **coaching**, **admin**.
 ## Running it
 
 ```bash
-cp .env.local.example .env.local   # fill in the Firebase values
-npm install
-npm run dev                        # http://localhost:3000
+copy .env.local.example .env.local   # fill in the Firebase values
+npm ci
+npm run dev                          # http://localhost:3000
 ```
 
 The app runs before Firebase is configured - every screen renders, sign-in is
@@ -26,7 +26,7 @@ docker compose up -d db frontend
 |---|---|
 | `npm run dev` | Dev server on :3000 |
 | `npm run build` | Production build |
-| `npm run test` | Vitest, 41 tests |
+| `npm run test` | Vitest, 57 tests |
 | `npm run lint` | ESLint, including the portal-isolation rule |
 | `npm run typecheck` | `tsc --noEmit` |
 

@@ -1,4 +1,68 @@
+import uuid
+
+import pytest_asyncio
 from httpx import AsyncClient
+from sqlalchemy import text
+
+from app.main import app
+from app.middleware.auth import get_current_user
+
+
+@pytest_asyncio.fixture
+async def seed_landing(db_session):
+    """A college with a slug and landing content, plus one open course."""
+    college_id, course_id = uuid.uuid4(), uuid.uuid4()
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO colleges
+                (id, name, slug, location, city, state, type, active,
+                 landing_hero_image_url, landing_description,
+                 landing_gallery_urls)
+            VALUES (:id, 'Landing College', 'landing-college', 'FC Road', 'Pune',
+                    'Maharashtra', 'private', true,
+                    'https://img.example/hero.jpg', 'A great place to study.',
+                    '["https://img.example/1.jpg", "https://img.example/2.jpg"]')
+            """
+        ),
+        {"id": college_id},
+    )
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO college_courses
+                (id, college_id, course_name, stream, duration_years, seats,
+                 application_fee, active)
+            VALUES (:id, :cid, 'B.Sc Statistics', 'UG', 3, 60, 1500, true)
+            """
+        ),
+        {"id": course_id, "cid": college_id},
+    )
+    await db_session.commit()
+    return {"college_id": str(college_id), "course_id": str(course_id)}
+
+
+@pytest_asyncio.fixture
+async def landing_admin(client, auth_as, db_session, seed_landing):
+    """A college admin bound to the landing college, already authenticated."""
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO college_admins
+                (id, firebase_uid, college_id, name, email, active)
+            VALUES (:id, 'uid-landing-admin', :cid, 'Landing Admin',
+                    'landing.admin@example.com', true)
+            """
+        ),
+        {"id": uuid.uuid4(), "cid": seed_landing["college_id"]},
+    )
+    await db_session.commit()
+    auth_as(
+        "uid-landing-admin",
+        role="college",
+        college_id=seed_landing["college_id"],
+    )
+    return seed_landing
 
 
 class TestColleges:
@@ -80,3 +144,108 @@ class TestColleges:
         ):
             auth_as(f"uid-{role}", role=role, **extra)
             assert (await client.get("/colleges/")).status_code == 200, role
+
+    async def test_list_carries_the_slug_for_landing_links(
+        self, client: AsyncClient, a_student, seed_landing
+    ):
+        colleges = (await client.get("/colleges/")).json()
+        match = [c for c in colleges if c["name"] == "Landing College"]
+        assert match and match[0]["slug"] == "landing-college"
+
+
+class TestCollegeLanding:
+    async def test_by_slug_returns_the_public_landing(
+        self, client: AsyncClient, seed_landing
+    ):
+        response = await client.get("/colleges/by-slug/landing-college")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["slug"] == "landing-college"
+        assert body["landing_hero_image_url"] == "https://img.example/hero.jpg"
+        assert body["landing_description"] == "A great place to study."
+        assert body["landing_gallery_urls"] == [
+            "https://img.example/1.jpg",
+            "https://img.example/2.jpg",
+        ]
+        assert body["courses"][0]["course_name"] == "B.Sc Statistics"
+        assert body["courses"][0]["application_fee"] == 150000
+
+    async def test_by_slug_unknown_or_malformed_is_404(
+        self, client: AsyncClient, seed_landing
+    ):
+        assert (await client.get("/colleges/by-slug/no-such-college")).status_code == 404
+        # Malformed slugs 404 rather than teaching the grammar via 422s.
+        assert (await client.get("/colleges/by-slug/NOT-A-SLUG")).status_code == 404
+        assert (await client.get("/colleges/by-slug/bad_slug!")).status_code == 404
+
+    async def test_by_slug_hides_inactive_colleges(
+        self, client: AsyncClient, seed_landing, db_session
+    ):
+        await db_session.execute(
+            text("UPDATE colleges SET active = false WHERE slug = 'landing-college'")
+        )
+        await db_session.commit()
+        assert (await client.get("/colleges/by-slug/landing-college")).status_code == 404
+
+    async def test_by_slug_needs_no_token(self, client: AsyncClient, seed_landing):
+        """The landing page is top-of-funnel: demanding a login strangles it."""
+        app.dependency_overrides.pop(get_current_user, None)
+        try:
+            response = await client.get("/colleges/by-slug/landing-college")
+            assert response.status_code == 200
+        finally:
+            app.dependency_overrides[get_current_user] = lambda: {
+                "uid": "test-uid",
+                "role": "student",
+            }
+
+    async def test_college_can_edit_its_own_landing_page(
+        self, client: AsyncClient, landing_admin
+    ):
+        response = await client.patch(
+            "/college/profile",
+            json={
+                "landing_description": "New copy.",
+                "landing_gallery_urls": ["https://img.example/9.jpg"],
+            },
+        )
+        assert response.status_code == 200
+
+        profile = (await client.get("/college/profile")).json()
+        assert profile["landing_description"] == "New copy."
+        assert profile["landing_gallery_urls"] == ["https://img.example/9.jpg"]
+
+    async def test_admin_can_edit_landing_fields(
+        self, client: AsyncClient, auth_as, seed_landing
+    ):
+        auth_as("uid-admin-landing", role="admin")
+        college_id = seed_landing["college_id"]
+        response = await client.patch(
+            f"/admin/colleges/{college_id}",
+            json={"landing_hero_image_url": "https://img.example/admin.jpg"},
+        )
+        assert response.status_code == 200
+
+        detail = (await client.get(f"/admin/colleges/{college_id}")).json()
+        assert detail["landing_hero_image_url"] == "https://img.example/admin.jpg"
+        assert detail["slug"] == "landing-college"
+
+    async def test_admin_create_accepts_a_slug_and_rejects_collisions(
+        self, client: AsyncClient, auth_as
+    ):
+        auth_as("uid-admin-slug", role="admin")
+        payload = {
+            "name": "Slug College",
+            "location": "L",
+            "city": "Pune",
+            "state": "MH",
+            "type": "private",
+            "slug": "slug-college",
+        }
+        assert (await client.post("/admin/colleges", json=payload)).status_code == 201
+
+        # Same name, no explicit slug: the generated slug collides, so this is
+        # a 409 asking for an explicit slug rather than a 500.
+        clash = dict(payload)
+        del clash["slug"]
+        assert (await client.post("/admin/colleges", json=clash)).status_code == 409

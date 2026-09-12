@@ -1,0 +1,91 @@
+# Production overlay. The base file is development-oriented (bind mounts,
+# --reload, dev Dockerfile); this file turns the same services into something
+# a domain can point at.
+#
+# Usage, from the repository root:
+#   cp .env.prod.example .env          # fill in every value (all required)
+#   # place backend/firebase-service-account.json (gitignored, never committed)
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml exec backend \
+#     alembic -c /app/alembic.ini upgrade head
+#
+# Every ${...} below has NO default on purpose: compose fails fast naming the
+# missing variable instead of booting a misconfigured stack. TLS terminates at
+# your reverse proxy (the app sends HSTS in production); point the proxy at
+# 127.0.0.1:8000 (API) and 127.0.0.1:3000 (web).
+
+services:
+  db:
+    restart: unless-stopped
+
+  backend:
+    # Named image so a registry deploy can `pull` a released tag instead of
+    # building on the server. Unset (local prod), it just tags the local build.
+    image: ${BACKEND_IMAGE:-edee-apply-backend:prod}
+    # No code bind mount: the image already contains the code, and overlaying
+    # it would smuggle host .env files back in. Only the service account is
+    # mounted, read-only. (!override because plain lists union with the base.)
+    volumes: !override
+      - type: bind
+        source: ./backend/firebase-service-account.json
+        target: /app/firebase-service-account.json
+        read_only: true
+    # No --reload here (the dev command is replaced). To scale past one
+    # worker, extend this command with --workers N; each worker owns its own
+    # small pool (see app/db/connection.py), so size Postgres accordingly.
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://dev:dev@db:5432/college_platform
+      FIREBASE_SERVICE_ACCOUNT_PATH: /app/firebase-service-account.json
+      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:?RAZORPAY_KEY_ID is required - copy .env.prod.example to .env and fill it in}
+      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:?RAZORPAY_KEY_SECRET is required - copy .env.prod.example to .env and fill it in}
+      RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET:?RAZORPAY_WEBHOOK_SECRET is required - copy .env.prod.example to .env and fill it in}
+      CORS_ORIGINS: ${CORS_ORIGINS:?CORS_ORIGINS is required - copy .env.prod.example to .env and fill it in}
+      ENVIRONMENT: production
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    # See backend `image:` above for why this is parameterised.
+    image: ${FRONTEND_IMAGE:-edee-apply-frontend:prod}
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      # NEXT_PUBLIC_* is inlined at BUILD time; setting it at runtime does
+      # nothing, which is why these are build args, not environment.
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?NEXT_PUBLIC_API_URL is required - copy .env.prod.example to .env and fill it in}
+        NEXT_PUBLIC_FIREBASE_API_KEY: ${NEXT_PUBLIC_FIREBASE_API_KEY:?missing - copy .env.prod.example to .env and fill it in}
+        NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ${NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN:?missing - copy .env.prod.example to .env and fill it in}
+        NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${NEXT_PUBLIC_FIREBASE_PROJECT_ID:?missing - copy .env.prod.example to .env and fill it in}
+        NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: ${NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET:?missing - copy .env.prod.example to .env and fill it in}
+        NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ${NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID:?missing - copy .env.prod.example to .env and fill it in}
+        NEXT_PUBLIC_FIREBASE_APP_ID: ${NEXT_PUBLIC_FIREBASE_APP_ID:?missing - copy .env.prod.example to .env and fill it in}
+    # Clear the dev bind mounts and env file: they would hide the built app
+    # and fail the boot when .env.local is absent. Plain `[]` unions instead
+    # of clearing, hence the override tags.
+    volumes: !override []
+    env_file: !override []
+    environment:
+      PORT: 3000
+      HOSTNAME: 0.0.0.0
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://127.0.0.1:3000/",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+    depends_on:
+      backend:
+        condition: service_healthy

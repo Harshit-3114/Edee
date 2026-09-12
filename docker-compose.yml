@@ -8,8 +8,10 @@ services:
       POSTGRES_DB: college_platform
     # Bound to loopback. Without the 127.0.0.1 prefix Docker publishes on
     # 0.0.0.0, which puts a dev/dev Postgres on every network the laptop joins.
+    # Published on 5433 (not 5432) because many machines already run a local
+    # PostgreSQL on 5432; using 5433 means this container never fights it.
     ports:
-      - "127.0.0.1:5432:5432"
+      - "127.0.0.1:5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:

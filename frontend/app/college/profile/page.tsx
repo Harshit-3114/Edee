@@ -14,6 +14,9 @@ interface CollegeProfile {
   city: string;
   state: string;
   type: string;
+  landing_hero_image_url: string | null;
+  landing_description: string | null;
+  landing_gallery_urls: string[] | null;
 }
 
 export default function CollegeProfilePage() {
@@ -51,6 +54,9 @@ export default function CollegeProfilePage() {
         location: profile.location,
         city: profile.city,
         state: profile.state,
+        landing_hero_image_url: profile.landing_hero_image_url || null,
+        landing_description: profile.landing_description || null,
+        landing_gallery_urls: profile.landing_gallery_urls,
       });
       setSubmitted(true);
     } catch (err) {
@@ -118,6 +124,58 @@ export default function CollegeProfilePage() {
                   setProfile({ ...profile, state: event.target.value });
                   setSubmitted(false);
                 }}
+              />
+            )}
+          </Field>
+
+          <Field
+            label="Landing page hero image"
+            hint="A public URL for the banner on your landing page."
+          >
+            {(fieldProps) => (
+              <Input
+                {...fieldProps}
+                type="url"
+                value={profile.landing_hero_image_url ?? ''}
+                onChange={(event) => {
+                  setProfile({ ...profile, landing_hero_image_url: event.target.value });
+                  setSubmitted(false);
+                }}
+                placeholder="https://…"
+              />
+            )}
+          </Field>
+
+          <Field label="Landing page description">
+            {(fieldProps) => (
+              <Textarea
+                {...fieldProps}
+                value={profile.landing_description ?? ''}
+                onChange={(event) => {
+                  setProfile({ ...profile, landing_description: event.target.value });
+                  setSubmitted(false);
+                }}
+              />
+            )}
+          </Field>
+
+          <Field
+            label="Landing page gallery"
+            hint="One image URL per line. Shown to every visitor."
+          >
+            {(fieldProps) => (
+              <Textarea
+                {...fieldProps}
+                value={(profile.landing_gallery_urls ?? []).join('\n')}
+                onChange={(event) => {
+                  const urls = event.target.value
+                    .split('\n')
+                    .map((line) => line.trim())
+                    .filter((line) => line.length > 0);
+                  setProfile({ ...profile, landing_gallery_urls: urls });
+                  setSubmitted(false);
+                }}
+                placeholder={'https://…\nhttps://…'}
               />
             )}
           </Field>

@@ -3,7 +3,6 @@ import hmac
 import json
 import uuid
 
-import pytest
 import pytest_asyncio
 from httpx import AsyncClient
 from sqlalchemy import text
@@ -38,8 +37,8 @@ async def two_courses(db_session):
     await db_session.execute(
         text(
             """
-            INSERT INTO colleges (id, name, location, city, state, type, active)
-            VALUES (:id, 'Symbiosis', 'Viman Nagar', 'Pune', 'Maharashtra',
+            INSERT INTO colleges (id, name, slug, location, city, state, type, active)
+            VALUES (:id, 'Symbiosis', 'symbiosis', 'Viman Nagar', 'Pune', 'Maharashtra',
                     'private', true)
             """
         ),
@@ -314,3 +313,98 @@ class TestPayments:
             await db_session.execute(text("SELECT count(*) FROM applications"))
         ).scalar_one()
         assert count == 1
+
+    async def _pay_for_one(
+        self, client: AsyncClient, a_student, two_courses, db_session, monkeypatch, order_id, payment_id, amount=None
+    ):
+        monkeypatch.setattr(
+            "app.routers.payments.razorpay_client.order.create",
+            lambda payload: {"id": order_id, **payload},
+        )
+        await client.post(
+            "/shortlists/",
+            json={
+                "college_id": two_courses["college_id"],
+                "course_id": two_courses["course_a"],
+            },
+        )
+        entry_id = (await client.get("/shortlists/")).json()[0]["id"]
+        response = await client.post(
+            "/payments/create-order", json={"shortlist_ids": [entry_id]}
+        )
+        paid = amount if amount is not None else response.json()["amount"]
+        body = captured(order_id, paid, payment_id=payment_id)
+        return await client.post(
+            "/payments/webhook",
+            content=body,
+            headers={"X-Razorpay-Signature": sign(body)},
+        )
+
+    async def test_a_student_can_withdraw_their_application(
+        self, client: AsyncClient, a_student, two_courses, db_session, monkeypatch
+    ):
+        await self._pay_for_one(
+            client, a_student, two_courses, db_session, monkeypatch,
+            "order_withdraw", "pay_withdraw",
+        )
+        application_id = (
+            await db_session.execute(text("SELECT id FROM applications"))
+        ).scalar_one()
+
+        # The owner withdraws from a pre-decision state.
+        assert (
+            await client.post(f"/students/me/applications/{application_id}/withdraw")
+        ).status_code == 200
+        status = (
+            await db_session.execute(
+                text("SELECT status FROM applications WHERE id = :id"),
+                {"id": application_id},
+            )
+        ).scalar_one()
+        assert status == "withdrawn"
+
+    async def test_a_decision_cannot_be_withdrawn(
+        self, client: AsyncClient, a_student, two_courses, db_session, monkeypatch
+    ):
+        await self._pay_for_one(
+            client, a_student, two_courses, db_session, monkeypatch,
+            "order_decided", "pay_decided",
+        )
+        application_id = (
+            await db_session.execute(text("SELECT id FROM applications"))
+        ).scalar_one()
+        # Move it to a terminal state as the college would.
+        await db_session.execute(
+            text("UPDATE applications SET status = 'accepted' WHERE id = :id"),
+            {"id": application_id},
+        )
+        await db_session.commit()
+
+        assert (
+            await client.post(f"/students/me/applications/{application_id}/withdraw")
+        ).status_code == 409
+
+    async def test_a_student_cannot_withdraw_someone_elses_application(
+        self, client: AsyncClient, auth_as, a_student, two_courses, db_session, monkeypatch
+    ):
+        await self._pay_for_one(
+            client, a_student, two_courses, db_session, monkeypatch,
+            "order_foreign", "pay_foreign",
+        )
+        application_id = (
+            await db_session.execute(text("SELECT id FROM applications"))
+        ).scalar_one()
+
+        auth_as("uid-other", role="student")
+        await client.post(
+            "/students/",
+            json={
+                "name": "Other Person",
+                "email": "otherperson@example.com",
+                "phone": "9876522222",
+                "stream": "UG",
+            },
+        )
+        assert (
+            await client.post(f"/students/me/applications/{application_id}/withdraw")
+        ).status_code == 404

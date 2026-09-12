@@ -1,11 +1,15 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import (
-    Column, String, Text, Integer, Boolean, DateTime, ForeignKey, UniqueConstraint, CheckConstraint
+    Column, Text, Integer, Boolean, DateTime, ForeignKey, UniqueConstraint, CheckConstraint, func, text
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 from app.db.tables import Base
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 class Student(Base):
@@ -17,7 +21,7 @@ class Student(Base):
     email = Column(Text, unique=True, nullable=False)
     phone = Column(Text, unique=True, nullable=False)
     stream = Column(Text, nullable=False)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=_utcnow, server_default=func.now())
 
     __table_args__ = (
         CheckConstraint("stream IN ('UG', 'PG')", name="stream_check"),
@@ -43,7 +47,7 @@ class College(Base):
     landing_description = Column(Text)
     landing_gallery_urls = Column(JSONB)
     active = Column(Boolean, default=True)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=_utcnow, server_default=func.now())
 
     courses = relationship("CollegeCourse", back_populates="college")
     admins = relationship("CollegeAdmin", back_populates="college")
@@ -63,6 +67,10 @@ class CollegeCourse(Base):
     application_fee = Column(Integer, nullable=False)
     active = Column(Boolean, default=True)
 
+    __table_args__ = (
+        CheckConstraint("application_fee > 0", name="course_fee_positive"),
+    )
+
     college = relationship("College", back_populates="courses")
     shortlists = relationship("Shortlist", back_populates="course")
     applications = relationship("Application", back_populates="course")
@@ -75,7 +83,7 @@ class Shortlist(Base):
     student_id = Column(UUID(as_uuid=True), ForeignKey("students.id"), nullable=False)
     college_id = Column(UUID(as_uuid=True), ForeignKey("colleges.id"), nullable=False)
     course_id = Column(UUID(as_uuid=True), ForeignKey("college_courses.id"), nullable=False)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=_utcnow, server_default=func.now())
 
     __table_args__ = (
         UniqueConstraint("student_id", "college_id", "course_id", name="uq_shortlist"),
@@ -95,10 +103,42 @@ class Order(Base):
     amount = Column(Integer, nullable=False)
     currency = Column(Text, default="INR")
     status = Column(Text, default="created")
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=_utcnow, server_default=func.now())
+
+    __table_args__ = (
+        CheckConstraint("status IN ('created', 'paid', 'failed')", name="order_status_check"),
+        CheckConstraint("amount > 0", name="order_amount_positive"),
+    )
 
     student = relationship("Student", back_populates="orders")
     payments = relationship("Payment", back_populates="order")
+    items = relationship("OrderItem", back_populates="order")
+
+
+class OrderItem(Base):
+    __tablename__ = "order_items"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    order_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("orders.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    # Not an FK: the shortlist row may be removed after paying.
+    shortlist_id = Column(UUID(as_uuid=True), nullable=False)
+    college_id = Column(UUID(as_uuid=True), ForeignKey("colleges.id"), nullable=False)
+    course_id = Column(
+        UUID(as_uuid=True), ForeignKey("college_courses.id"), nullable=False
+    )
+    # Fee as quoted at purchase, in paise.
+    amount = Column(Integer, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=_utcnow, server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("order_id", "course_id", name="uq_order_item"),
+    )
+
+    order = relationship("Order", back_populates="items")
 
 
 class Payment(Base):
@@ -110,7 +150,7 @@ class Payment(Base):
     razorpay_signature = Column(Text, nullable=False)
     amount = Column(Integer, nullable=False)
     status = Column(Text, default="captured")
-    verified_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    verified_at = Column(DateTime(timezone=True), default=_utcnow, server_default=func.now())
 
     order = relationship("Order", back_populates="payments")
     applications = relationship("Application", back_populates="payment")
@@ -120,7 +160,7 @@ class ProcessedWebhook(Base):
     __tablename__ = "processed_webhooks"
 
     razorpay_payment_id = Column(Text, primary_key=True)
-    processed_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    processed_at = Column(DateTime(timezone=True), default=_utcnow, server_default=func.now())
 
 
 class CollegeAdmin(Base):
@@ -132,7 +172,7 @@ class CollegeAdmin(Base):
     name = Column(Text, nullable=False)
     email = Column(Text, unique=True, nullable=False)
     active = Column(Boolean, default=True)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=_utcnow, server_default=func.now())
 
     college = relationship("College", back_populates="admins")
 
@@ -145,7 +185,7 @@ class CoachingCenter(Base):
     city = Column(Text)
     state = Column(Text)
     active = Column(Boolean, default=True)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=_utcnow, server_default=func.now())
 
     admins = relationship("CoachingCenterAdmin", back_populates="coaching_center")
     student_links = relationship("StudentCoachingLink", back_populates="coaching_center")
@@ -160,7 +200,7 @@ class CoachingCenterAdmin(Base):
     name = Column(Text, nullable=False)
     email = Column(Text, unique=True, nullable=False)
     active = Column(Boolean, default=True)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=_utcnow, server_default=func.now())
 
     coaching_center = relationship("CoachingCenter", back_populates="admins")
 
@@ -171,7 +211,7 @@ class StudentCoachingLink(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     student_id = Column(UUID(as_uuid=True), ForeignKey("students.id"), nullable=False)
     coaching_center_id = Column(UUID(as_uuid=True), ForeignKey("coaching_centers.id"), nullable=False)
-    linked_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    linked_at = Column(DateTime(timezone=True), default=_utcnow, server_default=func.now())
 
     __table_args__ = (
         UniqueConstraint("student_id", "coaching_center_id", name="uq_student_coaching_link"),
@@ -190,11 +230,17 @@ class Application(Base):
     course_id = Column(UUID(as_uuid=True), ForeignKey("college_courses.id"), nullable=False)
     payment_id = Column(UUID(as_uuid=True), ForeignKey("payments.id"))
     status = Column(Text, default="payment_received")
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
-    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    status_note = Column(Text)
+    status_changed_by = Column(UUID(as_uuid=True))
+    created_at = Column(DateTime(timezone=True), default=_utcnow, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), default=_utcnow, server_default=func.now(), onupdate=_utcnow)
 
     __table_args__ = (
         UniqueConstraint("student_id", "college_id", "course_id", name="uq_application"),
+        CheckConstraint(
+            "status IN ('payment_received', 'under_review', 'accepted', 'rejected', 'withdrawn')",
+            name="application_status_check",
+        ),
     )
 
     student = relationship("Student", back_populates="applications")
@@ -212,5 +258,43 @@ class AuditEvent(Base):
     action = Column(Text, nullable=False)
     entity_type = Column(Text)
     entity_id = Column(UUID(as_uuid=True))
-    event_metadata = Column(JSONB)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    # Column is named "metadata" in the database; the Python attribute is
+    # "event_metadata" because "metadata" collides with SQLAlchemy's own
+    # DeclarativeBase.metadata attribute.
+    event_metadata = Column("metadata", JSONB)
+    created_at = Column(DateTime(timezone=True), default=_utcnow, server_default=func.now())
+
+
+class PlatformUser(Base):
+    __tablename__ = "platform_users"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    firebase_uid = Column(Text, unique=True, nullable=False)
+    name = Column(Text, nullable=False)
+    email = Column(Text, unique=True, nullable=False)
+    role = Column(Text, nullable=False)
+    active = Column(Boolean, nullable=False, default=True)
+    created_by = Column(UUID(as_uuid=True))
+    created_at = Column(DateTime(timezone=True), default=_utcnow, server_default=func.now())
+
+    __table_args__ = (
+        CheckConstraint("role IN ('admin')", name="platform_user_role_check"),
+    )
+
+
+class CoachingInvite(Base):
+    __tablename__ = "coaching_invites"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    coaching_center_id = Column(
+        UUID(as_uuid=True), ForeignKey("coaching_centers.id"), nullable=False
+    )
+    code = Column(Text, unique=True, nullable=False)
+    max_uses = Column(Integer, nullable=False, default=100, server_default=text("100"))
+    uses = Column(Integer, nullable=False, default=0, server_default=text("0"))
+    expires_at = Column(DateTime(timezone=True))
+    created_at = Column(DateTime(timezone=True), default=_utcnow, server_default=func.now())
+
+    __table_args__ = (
+        CheckConstraint("uses <= max_uses", name="invite_uses_within_max"),
+    )

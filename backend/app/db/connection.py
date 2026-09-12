@@ -2,28 +2,42 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sess
 from sqlalchemy import text
 from app.core.config import settings, SQL_ECHO
 
-engine = create_async_engine(
-    settings.DATABASE_URL,
-    pool_size=2,  # small on purpose: PgBouncer does the multiplexing
-    max_overflow=3,
-    pool_timeout=10,
-    pool_pre_ping=True,
-    pool_recycle=1800,
-    # echo prints statements *with their parameters* - names, emails, phone
-    # numbers. Development only; see app/core/config.py.
-    echo=SQL_ECHO,
-)
 
-AsyncSessionLocal = async_sessionmaker(
-    engine,
-    class_=AsyncSession,
-    expire_on_commit=False,
-)
+_engine = None
+_AsyncSessionLocal = None
+
+
+def get_engine():
+    """Lazy engine creation - ensures the engine is created in the correct event loop."""
+    global _engine
+    if _engine is None:
+        _engine = create_async_engine(
+            settings.DATABASE_URL,
+            pool_size=2,
+            max_overflow=3,
+            pool_timeout=10,
+            pool_pre_ping=True,
+            pool_recycle=1800,
+            echo=SQL_ECHO,
+        )
+    return _engine
+
+
+def get_session_factory():
+    """Lazy session factory creation."""
+    global _AsyncSessionLocal
+    if _AsyncSessionLocal is None:
+        _AsyncSessionLocal = async_sessionmaker(
+            get_engine(),
+            class_=AsyncSession,
+            expire_on_commit=False,
+        )
+    return _AsyncSessionLocal
 
 
 async def init_db():
     """Confirms the database is reachable at startup rather than on first request."""
-    async with engine.begin() as conn:
+    async with get_engine().begin() as conn:
         await conn.execute(text("SELECT 1"))
 
 
@@ -35,7 +49,7 @@ async def get_db():
     returns its connection to the pool still dirty, and the next request to
     borrow it fails on a transaction it never started.
     """
-    async with AsyncSessionLocal() as session:
+    async with get_session_factory()() as session:
         try:
             yield session
         except Exception:
