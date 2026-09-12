@@ -65,6 +65,10 @@ class CollegeCourse(Base):
     duration_years = Column(Integer)
     seats = Column(Integer)
     application_fee = Column(Integer, nullable=False)
+    # When applications close. NULL means open indefinitely. A closed course
+    # can be shortlisted against no longer, but paid applications are still
+    # honoured: money taken is a promise kept.
+    closing_date = Column(DateTime(timezone=True))
     active = Column(Boolean, default=True)
 
     __table_args__ = (
@@ -101,6 +105,11 @@ class Order(Base):
     student_id = Column(UUID(as_uuid=True), ForeignKey("students.id"), nullable=False)
     razorpay_order_id = Column(Text, unique=True, nullable=False)
     amount = Column(Integer, nullable=False)
+    # Gross quoted total and scholarship discount, both paise. amount is what
+    # Razorpay charged (gross minus discount); the two are kept apart so
+    # receipts can show the maths instead of a single inscrutable number.
+    total_amount = Column(Integer, nullable=False)
+    discount_amount = Column(Integer, nullable=False, default=0)
     currency = Column(Text, default="INR")
     status = Column(Text, default="created")
     created_at = Column(DateTime(timezone=True), default=_utcnow, server_default=func.now())
@@ -139,6 +148,25 @@ class OrderItem(Base):
     )
 
     order = relationship("Order", back_populates="items")
+
+
+class ScholarshipSlab(Base):
+    """
+    OneApply-style volume discount: applying to N courses at once earns a
+    discount of discount_paise off the summed fees. Beyond the largest slab
+    the discount grows per form (see scholarship_for_count in payments).
+    Seeded from scripts, tunable without a deploy.
+    """
+
+    __tablename__ = "scholarship_slabs"
+
+    min_forms = Column(Integer, primary_key=True)
+    discount_paise = Column(Integer, nullable=False)
+
+    __table_args__ = (
+        CheckConstraint("min_forms > 0", name="slab_forms_positive"),
+        CheckConstraint("discount_paise > 0", name="slab_discount_positive"),
+    )
 
 
 class Payment(Base):

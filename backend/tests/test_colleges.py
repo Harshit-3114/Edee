@@ -152,6 +152,22 @@ class TestColleges:
         match = [c for c in colleges if c["name"] == "Landing College"]
         assert match and match[0]["slug"] == "landing-college"
 
+    async def test_list_needs_no_token(self, client: AsyncClient, seed_landing):
+        """College discovery is top-of-funnel: anonymous visitors may browse."""
+        from app.main import app as fastapi_app
+        from app.middleware.auth import get_current_user
+
+        fastapi_app.dependency_overrides.pop(get_current_user, None)
+        try:
+            response = await client.get("/colleges/")
+            assert response.status_code == 200
+            assert any(c["name"] == "Landing College" for c in response.json())
+        finally:
+            fastapi_app.dependency_overrides[get_current_user] = lambda: {
+                "uid": "test-uid",
+                "role": "student",
+            }
+
 
 class TestCollegeLanding:
     async def test_by_slug_returns_the_public_landing(

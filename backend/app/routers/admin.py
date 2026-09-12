@@ -16,6 +16,7 @@ import logging
 
 from app.db.connection import get_db
 from app.middleware.auth import require_roles
+from app.services import health as health_checks
 from app.services.firebase import assign_role, revoke_access
 from app.core.slug import is_valid_slug, make_slug
 from app.models.college import clean_gallery, dump_gallery, parse_gallery
@@ -127,6 +128,24 @@ async def dashboard(db: AsyncSession = Depends(get_db)):
     return dict(result.fetchone()._mapping)
 
 
+@router.get("/system", response_model=health_checks.SystemStatus)
+async def system_status():
+    """
+    Live dependency checks for the admin status page: API itself, database,
+    Firebase Auth, and Razorpay.
+
+    Deliberately outside get_db: if the database is the thing that is down,
+    the endpoint must still answer "database: down" instead of 500ing.
+    """
+    services = [
+        health_checks.check_api(),
+        await health_checks.check_database(),
+        health_checks.check_firebase(),
+        health_checks.check_razorpay(),
+    ]
+    return health_checks.summarize(services)
+
+
 @router.get("/colleges")
 async def list_colleges(db: AsyncSession = Depends(get_db)):
     result = await db.execute(
@@ -205,17 +224,19 @@ async def get_college(college_id: UUID, db: AsyncSession = Depends(get_db)):
                                'course_name', cc.course_name, 'stream', cc.stream,
                                'duration_years', cc.duration_years,
                                'seats', cc.seats,
-                               'application_fee', cc.application_fee * 100,
-                               'active', cc.active
+                                'application_fee', cc.application_fee * 100,
+                                'active', cc.active,
+                                'closing_date', cc.closing_date
                            ) ORDER BY cc.course_name
                        ) FILTER (WHERE cc.id IS NOT NULL), '[]'
                    ) AS courses,
                    (SELECT count(*) FROM applications a WHERE a.college_id = c.id)
                        AS application_count,
-                   (SELECT COALESCE(sum(oi.amount), 0)
-                      FROM order_items oi
-                      JOIN orders o ON o.id = oi.order_id AND o.status = 'paid'
-                     WHERE oi.college_id = c.id) AS fees_collected
+                    (SELECT COALESCE(sum(oi.amount - (oi.amount::bigint * o.discount_amount)
+                       / NULLIF(o.total_amount, 0)), 0)
+                       FROM order_items oi
+                       JOIN orders o ON o.id = oi.order_id AND o.status = 'paid'
+                      WHERE oi.college_id = c.id) AS fees_collected
             FROM colleges c
             LEFT JOIN college_courses cc ON cc.college_id = c.id
             WHERE c.id = :cid
@@ -492,6 +513,7 @@ async def create_user(body: UserCreate, db: AsyncSession = Depends(get_db)):
 
     await _audit(db, f"user.created.{body.role}", "user", user_id)
     await db.commit()
+    logger.info("staff account created role=%s id=%s", body.role, user_id)
     return {"id": str(user_id), "email": email}
 
 
@@ -547,8 +569,8 @@ async def update_user(
 
     if body.active:
         # Restoring must put the role claim back: revoke_access cleared it, and a
-        # restor-person without a claim is an account that can log in and be
-        # bounced out of every portal.
+        # restored account without a claim can log in but is bounced out of
+        # every portal.
         assign_role(
             firebase_uid,
             found_role,
@@ -556,9 +578,11 @@ async def update_user(
             coaching_centre_id=str(found_centre_id) if found_centre_id else None,
         )
         await _audit(db, "user.restored", "user", user_id)
+        logger.info("staff account restored role=%s id=%s", found_role, user_id)
     else:
         revoke_access(firebase_uid)
         await _audit(db, "user.revoked", "user", user_id)
+        logger.info("staff account revoked role=%s id=%s", found_role, user_id)
 
     await db.commit()
     return {"status": "active" if body.active else "revoked", "role": found_role}

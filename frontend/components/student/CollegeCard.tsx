@@ -1,6 +1,7 @@
 'use client';
 
-import { MapPin } from '@phosphor-icons/react';
+import Link from 'next/link';
+import { ArrowSquareOut, MapPin } from '@phosphor-icons/react';
 import Badge from '@/components/ui/Badge';
 import { formatFee } from '@/lib/format';
 import type { College } from '@/lib/types';
@@ -28,7 +29,7 @@ export default function CollegeCard({
   const courses = college.courses.filter((course) => course.active);
 
   return (
-    <article className="rounded-lg border border-[var(--line)] bg-[var(--surface-raised)] p-5">
+    <article className="rounded-lg border border-[var(--line)] bg-[var(--surface-raised)] p-5 transition-shadow duration-200 hover:shadow-[var(--shadow-md)]">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="text-base font-semibold tracking-tight">{college.name}</h3>
@@ -39,6 +40,18 @@ export default function CollegeCard({
         </div>
         <Badge>{TYPE_LABEL[college.type]}</Badge>
       </header>
+
+      {college.slug && (
+        <p className="mt-2 text-[13px]">
+          <Link
+            href={`/colleges/${college.slug}`}
+            className="inline-flex items-center gap-1 font-medium text-[var(--accent-text)] underline underline-offset-4"
+          >
+            View public landing page
+            <ArrowSquareOut size={13} aria-hidden="true" />
+          </Link>
+        </p>
+      )}
 
       {courses.length === 0 ? (
         <p className="mt-5 text-[13px] text-[var(--text-muted)]">

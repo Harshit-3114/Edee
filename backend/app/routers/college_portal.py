@@ -10,14 +10,18 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from uuid import UUID, uuid4
+from datetime import datetime
 from typing import List, Literal, Optional
 from pydantic import BaseModel, Field, field_validator
+import logging
 
 from app.db.connection import get_db
 from app.middleware.auth import current_college_id, require_roles
 from app.models.college import clean_gallery, dump_gallery, parse_gallery
 
 router = APIRouter()
+
+logger = logging.getLogger(__name__)
 
 # Mirrors the CHECK constraint on applications.status. Withdrawal belongs to
 # the student, so it is never reachable from here.
@@ -38,11 +42,15 @@ class CourseCreate(BaseModel):
     # Paise on the wire, rupees in the column. The `% 100 == 0` guard stops a
     # sub-rupee amount from being silently floored to a different fee on storage.
     application_fee: int = Field(ge=100, le=10_000_000, multiple_of=100)
+    # When applications close. Absent means open indefinitely; a past date
+    # closes the course immediately.
+    closing_date: Optional[datetime] = None
 
 
 class CourseUpdate(BaseModel):
     seats: Optional[int] = Field(default=None, ge=1, le=100_000)
     application_fee: Optional[int] = Field(default=None, ge=100, le=10_000_000, multiple_of=100)
+    closing_date: Optional[datetime] = None
     active: Optional[bool] = None
 
 
@@ -94,7 +102,12 @@ async def dashboard(
                 FROM college_courses WHERE active = true GROUP BY college_id
             ) s ON s.college_id = c.id
             LEFT JOIN (
-                SELECT oi.college_id, sum(oi.amount) AS collected
+                -- Net of each college's share of any order scholarship, split
+                -- across items in proportion to their quoted fees. Integer
+                -- division floors per row; the dust (a few paise) stays out.
+                SELECT oi.college_id,
+                       sum(oi.amount - (oi.amount::bigint * o.discount_amount)
+                           / NULLIF(o.total_amount, 0)) AS collected
                 FROM order_items oi
                 JOIN orders o ON o.id = oi.order_id AND o.status = 'paid'
                 GROUP BY oi.college_id
@@ -119,7 +132,7 @@ async def list_courses(
         text(
             """
             SELECT id, college_id, course_name, stream, duration_years, seats,
-                   application_fee * 100 AS application_fee, active
+                   application_fee * 100 AS application_fee, active, closing_date
             FROM college_courses
             WHERE college_id = :cid
             ORDER BY active DESC, course_name
@@ -142,8 +155,9 @@ async def create_course(
             """
             INSERT INTO college_courses
                 (id, college_id, course_name, stream, duration_years, seats,
-                 application_fee, active)
-            VALUES (:id, :cid, :name, :stream, :duration, :seats, :fee, true)
+                 application_fee, closing_date, active)
+            VALUES (:id, :cid, :name, :stream, :duration, :seats, :fee,
+                    :closing_date, true)
             """
         ),
         {
@@ -154,6 +168,7 @@ async def create_course(
             "duration": body.duration_years,
             "seats": body.seats,
             "fee": body.application_fee // 100,
+            "closing_date": body.closing_date,
         },
     )
     await db.commit()
@@ -172,6 +187,7 @@ async def get_course(
             SELECT cc.id, cc.college_id, cc.course_name, cc.stream,
                    cc.duration_years, cc.seats,
                    cc.application_fee * 100 AS application_fee, cc.active,
+                   cc.closing_date,
                    (SELECT count(*) FROM applications a
                      WHERE a.course_id = cc.id)                     AS applications_total,
                    (SELECT count(*) FROM applications a
@@ -221,7 +237,7 @@ async def update_course(
     if "application_fee" in updates:
         updates["application_fee"] //= 100
 
-    allowed = ("seats", "application_fee", "active")
+    allowed = ("seats", "application_fee", "closing_date", "active")
     fields = [k for k in allowed if k in updates]
     assignments = ", ".join(f"{k} = :{k}" for k in fields)
 
@@ -373,6 +389,12 @@ async def update_application(
         },
     )
     await db.commit()
+    logger.info(
+        "application status changed id=%s from=%s to=%s",
+        application_id,
+        row.status,
+        body.status,
+    )
     return {"status": body.status}
 
 

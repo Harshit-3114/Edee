@@ -1,12 +1,15 @@
 import { formatFee, pluralise } from '@/lib/format';
-import type { ShortlistEntry } from '@/lib/types';
+import type { OrderQuote, ShortlistEntry } from '@/lib/types';
 
 export default function CheckoutSummary({
   entries,
   total,
+  quote = null,
 }: {
   entries: ShortlistEntry[];
   total: number;
+  /** Server-priced preview. Absent until fetched, or when it fails. */
+  quote?: OrderQuote | null;
 }) {
   return (
     <section
@@ -39,9 +42,28 @@ export default function CheckoutSummary({
         ))}
       </ul>
 
-      <div className="flex items-center justify-between border-t border-[var(--line-strong)] px-5 py-4">
-        <span className="text-sm font-medium">Total payable</span>
-        <span className="tabular text-lg font-semibold">{formatFee(total)}</span>
+      <div className="border-t border-[var(--line-strong)] px-5 py-4">
+        {quote && quote.discount_amount > 0 ? (
+          <dl className="flex flex-col gap-1.5">
+            <div className="flex items-center justify-between text-sm text-[var(--text-secondary)]">
+              <dt>Total ({pluralise(quote.item_count, 'application', 'applications')})</dt>
+              <dd className="tabular line-through">{formatFee(quote.total_amount)}</dd>
+            </div>
+            <div className="flex items-center justify-between text-sm text-[var(--accent-text)]">
+              <dt>Scholarship · {quote.item_count} forms</dt>
+              <dd className="tabular font-medium">−{formatFee(quote.discount_amount)}</dd>
+            </div>
+            <div className="mt-1 flex items-center justify-between">
+              <dt className="text-sm font-medium">You pay</dt>
+              <dd className="tabular text-lg font-semibold">{formatFee(quote.amount)}</dd>
+            </div>
+          </dl>
+        ) : (
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium">Total payable</span>
+            <span className="tabular text-lg font-semibold">{formatFee(total)}</span>
+          </div>
+        )}
       </div>
     </section>
   );

@@ -27,6 +27,7 @@ const entry: ShortlistEntry = {
   state: 'Maharashtra',
   stream: 'UG',
   application_fee: 90000,
+  closing_date: null,
   created_at: '2026-06-01T10:00:00Z',
 };
 

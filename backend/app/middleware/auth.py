@@ -16,6 +16,7 @@ from uuid import UUID
 import logging
 
 from app.core.config import settings
+from app.core.devmode import is_dev_mode, parse_dev_token
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +65,21 @@ async def get_current_user(
         raise HTTPException(
             status_code=401,
             detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    token = credentials.credentials
+
+    # Dev mode (local development without Firebase only): accept
+    # self-described dev: tokens. Anything else is rejected here, before it
+    # can reach the real verifier.
+    if is_dev_mode():
+        claims = parse_dev_token(token)
+        if claims is not None:
+            return claims
+        raise HTTPException(
+            status_code=401,
+            detail="Dev mode: sign in with a dev: token (e.g. dev:student)",
             headers={"WWW-Authenticate": "Bearer"},
         )
 

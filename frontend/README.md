@@ -12,9 +12,10 @@ npm ci
 npm run dev                          # http://localhost:3000
 ```
 
-The app runs before Firebase is configured - every screen renders, sign-in is
-the only thing that will not work. That is deliberate, so the UI can be built
-against the backend before the Firebase project exists.
+The app runs before Firebase is configured - every screen renders, and the
+login page offers developer quick sign-in whenever the backend runs in dev
+mode (see the root README). Set `NEXT_PUBLIC_DEV_MODE=1` to force that panel
+even with Firebase configured; never point it at a production backend.
 
 With Docker, from the repository root:
 
@@ -26,7 +27,7 @@ docker compose up -d db frontend
 |---|---|
 | `npm run dev` | Dev server on :3000 |
 | `npm run build` | Production build |
-| `npm run test` | Vitest, 57 tests |
+| `npm run test` | Vitest, 88 tests |
 | `npm run lint` | ESLint, including the portal-isolation rule |
 | `npm run typecheck` | `tsc --noEmit` |
 

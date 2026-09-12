@@ -75,6 +75,7 @@ MATRIX = [
     ("GET", "/shortlists/", {"student"}),
     ("POST", "/shortlists/", {"student"}),
     ("POST", "/payments/create-order", {"student"}),
+    ("POST", "/payments/quote", {"student"}),
     ("GET", "/students/me", {"student"}),
     ("GET", "/students/me/applications", {"student"}),
     ("GET", "/college/courses", {"college"}),
@@ -89,6 +90,7 @@ MATRIX = [
     ("GET", "/admin/audit", {"admin"}),
     ("GET", "/admin/payments", {"admin"}),
     ("GET", "/admin/students", {"admin"}),
+    ("GET", "/admin/system", {"admin"}),
 ]
 
 
@@ -289,6 +291,12 @@ def test_landing_lookup_is_public_to_everyone():
 
 def test_health_needs_no_token():
     assert TestClient(app).get("/health").status_code == 200
+
+
+def test_responses_carry_a_request_id():
+    """Every response carries X-Request-ID so a user report maps to one grep."""
+    res = TestClient(app, raise_server_exceptions=False).get("/health")
+    assert res.headers.get("x-request-id")
 
 
 # --------------------------------------------------------------------------

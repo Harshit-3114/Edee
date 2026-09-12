@@ -11,6 +11,7 @@ from typing import Optional
 import logging
 
 from app.middleware.auth import _firebase_app
+from app.core.devmode import is_dev_mode
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +37,12 @@ def assign_role(
     if role == "coaching" and not coaching_centre_id:
         raise ValueError("coaching role requires coaching_centre_id")
 
+    # Dev mode has no Firebase project to write claims to. Identity lives
+    # entirely in the dev: token, so there is nothing to assign.
+    if is_dev_mode():
+        logger.debug("dev mode: skipping role assignment for %s", firebase_uid)
+        return
+
     claims = {"role": role}
     if college_id:
         claims["college_id"] = str(college_id)
@@ -53,7 +60,11 @@ def revoke_access(firebase_uid: str) -> None:
     """
     Immediate lockout. Clears the claim and revokes refresh tokens, which only
     takes effect because get_current_user verifies with check_revoked=True.
+    In dev mode there is nothing to revoke; the token is just a string.
     """
+    if is_dev_mode():
+        logger.debug("dev mode: skipping revocation for %s", firebase_uid)
+        return
     try:
         app = _firebase_app()
         firebase_auth.set_custom_user_claims(firebase_uid, {}, app=app)

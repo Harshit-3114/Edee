@@ -3,7 +3,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from app.db.connection import get_db
 from app.middleware.auth import require_roles
-from app.models.payment import CreateOrder, CreateOrderResponse, VerifyPayment
+from app.models.payment import (
+    CreateOrder,
+    CreateOrderResponse,
+    QuoteResponse,
+    VerifyPayment,
+)
 from app.services.razorpay import (
     razorpay_client,
     verify_payment_signature,
@@ -21,6 +26,35 @@ router = APIRouter()
 
 MAX_ITEMS_PER_ORDER = 25
 
+# Paise of scholarship per extra form once an order outgrows the slab table.
+# Matches the launch policy (the 6-form slab is exactly 6 x 500); the table
+# stays the source of truth up to its largest row.
+PER_FORM_BEYOND_SLABS = 50_000
+
+
+async def scholarship_for_count(db: AsyncSession, count: int) -> int:
+    """
+    Volume discount in paise for an order covering `count` applications.
+
+    Reads scholarship_slabs (min_forms -> discount_paise) and takes the best
+    slab at or below the count. No slabs configured means no discount, so an
+    unseeded database behaves exactly like the pre-scholarship code.
+    """
+    if count < 1:
+        return 0
+    result = await db.execute(
+        text(
+            "SELECT min_forms, discount_paise FROM scholarship_slabs "
+            "ORDER BY min_forms"
+        )
+    )
+    slabs = result.fetchall()
+    if not slabs:
+        return 0
+    if count > slabs[-1][0]:
+        return PER_FORM_BEYOND_SLABS * count
+    return max(discount for forms, discount in slabs if forms <= count)
+
 
 async def _student_id(user: dict, db: AsyncSession) -> uuid.UUID:
     result = await db.execute(
@@ -33,17 +67,17 @@ async def _student_id(user: dict, db: AsyncSession) -> uuid.UUID:
     return row[0]
 
 
-@router.post("/create-order", response_model=CreateOrderResponse)
-@limited("10/minute")
-async def create_order(
-    request: Request,
-    body: CreateOrder,
-    user: dict = Depends(require_roles("student")),
-    db: AsyncSession = Depends(get_db),
-):
-    student_id = await _student_id(user, db)
+async def _price_shortlist(
+    db: AsyncSession, student_id: uuid.UUID, shortlist_ids: list
+) -> tuple:
+    """
+    Price a set of shortlist entries: gross total, scholarship, payable.
 
-    requested = list(dict.fromkeys(body.shortlist_ids))  # de-duplicate, keep order
+    Shared by create-order and the quote endpoint so the number a student
+    sees before paying is computed by the exact code that charges them.
+    Raises the same HTTPExceptions either way.
+    """
+    requested = list(dict.fromkeys(shortlist_ids))  # de-duplicate, keep order
     if not requested:
         raise HTTPException(status_code=400, detail="No shortlist items given")
     if len(requested) > MAX_ITEMS_PER_ORDER:
@@ -70,6 +104,7 @@ async def create_order(
               AND s.student_id = :student_id
               AND cc.active = true
               AND c.active = true
+              AND (cc.closing_date IS NULL OR cc.closing_date > now())
             """
         ),
         {"ids": requested, "student_id": student_id},
@@ -111,11 +146,37 @@ async def create_order(
     if total_paise <= 0:
         raise HTTPException(status_code=400, detail="Nothing to pay")
 
+    # Volume scholarship off the gross total. It can never exceed the total,
+    # and Razorpay cannot charge less than a rupee, so a fully covered order
+    # is refused rather than sent to the gateway as zero.
+    discount = min(await scholarship_for_count(db, len(priced)), total_paise)
+    payable = total_paise - discount
+    if payable < 100:
+        raise HTTPException(
+            status_code=400,
+            detail="The scholarship covers the whole fee, so there is nothing to pay.",
+        )
+    return priced, total_paise, discount, payable
+
+
+@router.post("/create-order", response_model=CreateOrderResponse)
+@limited("10/minute")
+async def create_order(
+    request: Request,
+    body: CreateOrder,
+    user: dict = Depends(require_roles("student")),
+    db: AsyncSession = Depends(get_db),
+):
+    student_id = await _student_id(user, db)
+    priced, total_paise, discount, payable = await _price_shortlist(
+        db, student_id, body.shortlist_ids
+    )
+
     order_id = uuid.uuid4()
     try:
         rz_order = razorpay_client.order.create(
             {
-                "amount": total_paise,
+                "amount": payable,
                 "currency": "INR",
                 "receipt": f"order_{order_id.hex[:12]}",
                 "notes": {"student_id": str(student_id)},
@@ -130,15 +191,20 @@ async def create_order(
     await db.execute(
         text(
             """
-            INSERT INTO orders (id, student_id, razorpay_order_id, amount, currency, status)
-            VALUES (:id, :student_id, :razorpay_order_id, :amount, 'INR', 'created')
+            INSERT INTO orders
+                (id, student_id, razorpay_order_id, amount, total_amount,
+                 discount_amount, currency, status)
+            VALUES (:id, :student_id, :razorpay_order_id, :amount, :total,
+                    :discount, 'INR', 'created')
             """
         ),
         {
             "id": order_id,
             "student_id": student_id,
             "razorpay_order_id": rz_order["id"],
-            "amount": total_paise,
+            "amount": payable,
+            "total": total_paise,
+            "discount": discount,
         },
     )
 
@@ -165,11 +231,67 @@ async def create_order(
 
     await db.commit()
 
+    logger.info(
+        "order created id=%s items=%d total=%d discount=%d payable=%d",
+        order_id,
+        len(priced),
+        total_paise,
+        discount,
+        payable,
+    )
     return {
         "order_id": rz_order["id"],
-        "amount": total_paise,
+        "amount": payable,
+        "total_amount": total_paise,
+        "discount_amount": discount,
         "currency": "INR",
         "key_id": settings.RAZORPAY_KEY_ID,
+    }
+
+
+@router.get("/scholarship")
+async def scholarship_policy(db: AsyncSession = Depends(get_db)):
+    """
+    Current volume-discount slabs. Public: the home page renders the table
+    straight from here so marketing and checkout can never disagree.
+    """
+    result = await db.execute(
+        text(
+            "SELECT min_forms, discount_paise FROM scholarship_slabs "
+            "ORDER BY min_forms"
+        )
+    )
+    slabs = [
+        {"min_forms": row[0], "discount_paise": row[1]} for row in result.fetchall()
+    ]
+    return {"slabs": slabs, "per_form_beyond_paise": PER_FORM_BEYOND_SLABS}
+
+
+@router.post("/quote", response_model=QuoteResponse)
+@limited("30/minute")
+async def quote_order(
+    request: Request,
+    body: CreateOrder,
+    user: dict = Depends(require_roles("student")),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    What an order would cost, shown before any money moves.
+
+    Runs the exact pricing path create-order uses — same re-pricing, same
+    availability and duplicate checks, same scholarship — but stops before
+    Razorpay and writes nothing. A quote that disagrees with the later charge
+    would be worse than no quote, so the two share _price_shortlist.
+    """
+    student_id = await _student_id(user, db)
+    priced, total_paise, discount, payable = await _price_shortlist(
+        db, student_id, body.shortlist_ids
+    )
+    return {
+        "item_count": len(priced),
+        "total_amount": total_paise,
+        "discount_amount": discount,
+        "amount": payable,
     }
 
 
@@ -354,4 +476,10 @@ async def razorpay_webhook(
     )
 
     await db.commit()
+    logger.info(
+        "webhook captured order=%s payment=%s applications=%d",
+        razorpay_order_id,
+        razorpay_payment_id,
+        len(rows),
+    )
     return {"status": "ok", "applications": len(rows)}

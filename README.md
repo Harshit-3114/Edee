@@ -88,6 +88,25 @@ querying another's applicants.
 rupees; every endpoint converts at the edge so the API, the checkout, and
 Razorpay all speak one unit.
 
+## Development without Firebase (dev mode)
+
+When the backend has no Firebase service account (and `ENVIRONMENT` is
+development), it runs in **dev mode**: the login page offers developer
+quick sign-in, and any well-formed `dev:` token works — no Firebase project
+needed. `GET /health` reports it (`dev_mode: true`), and `start.bat` prints
+a banner when it detects it.
+
+- Tokens look like `dev:student[:tag]`, `dev:admin`, `dev:college:<id>`,
+  `dev:coaching:<id>`. The tag makes you a different student.
+- `GET /dev/directory` (dev mode only, otherwise 404) lists colleges and
+  centres to sign in as.
+- `DEV_MODE=1` in `backend/.env` (or `NEXT_PUBLIC_DEV_MODE=1` for the panel)
+  forces dev mode even with keys configured, while `DEV_MODE=0` forces it off
+  even without them; unset means auto-detect. Both are refused outside
+  development: staging and production fail to boot with them.
+- Dev mode fakes identity, never money: payments still need real Razorpay
+  credentials.
+
 See [SECURITY-FIXES.md](SECURITY-FIXES.md) for the audit carried out during the
 integration, including two issues that were giving away free applications.
 
@@ -102,7 +121,7 @@ integration, including two issues that were giving away free applications.
 | **Auth** | Firebase Admin SDK (JWT verification) |
 | **Payments** | Razorpay (order creation + webhook) |
 | **Containerisation** | Docker + docker‑compose |
-| **Testing** | pytest / httpx (backend, 139 tests) · Vitest (frontend, 57 tests) |
+| **Testing** | pytest / httpx (backend, 175 tests) · Vitest (frontend, 88 tests) |
 | **Code quality** | black, ruff, ESLint, `tsc --noEmit` |
 
 ---
@@ -255,6 +274,7 @@ RAZORPAY_KEY_SECRET=
 RAZORPAY_WEBHOOK_SECRET=
 CORS_ORIGINS=http://localhost:3000
 ENVIRONMENT=development
+LOG_LEVEL=INFO
 ```
 
 Frontend `.env.local` only contains publishable `NEXT_PUBLIC_*` values. Never put
@@ -285,7 +305,10 @@ Portals:
 
 - College: `/college/dashboard`, `/college/courses/*`, `/college/applications/*`, `/college/profile`
 - Coaching: `/coaching/dashboard`, `/coaching/students/*`, `/coaching/invites`, `/coaching/profile`
-- Admin: `/admin/dashboard`, `/admin/colleges/*`, `/admin/coaching-centres`, `/admin/students`, `/admin/users`, `/admin/payments`, `/admin/audit`
+- Admin: `/admin/dashboard`, `/admin/colleges/*`, `/admin/coaching-centres`, `/admin/students`, `/admin/users`, `/admin/payments`, `/admin/audit`, `/admin/system` (live dependency checks for the status page)
+
+Every response carries `X-Request-ID`; the backend logs one line per request
+at INFO (health checks at DEBUG), so a user report maps to a single grep.
 
 Full OpenAPI is served at `/openapi.json`; Swagger UI is at `/docs` outside production.
 

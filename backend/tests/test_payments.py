@@ -30,6 +30,21 @@ def captured(order_id: str, amount: int, payment_id: str = "pay_test_1") -> byte
 
 
 @pytest_asyncio.fixture
+async def slabs(db_session):
+    """Launch-policy slabs: 1→250, 2→600, 3→1000, 4→1500, 5→2500, 6→3000 rupees."""
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO scholarship_slabs (min_forms, discount_paise)
+            VALUES (1, 25000), (2, 60000), (3, 100000),
+                   (4, 150000), (5, 250000), (6, 300000)
+            """
+        )
+    )
+    await db_session.commit()
+
+
+@pytest_asyncio.fixture
 async def two_courses(db_session):
     """One college, two open courses at 1500 and 2000 rupees."""
     college_id = uuid.uuid4()
@@ -408,3 +423,185 @@ class TestPayments:
         assert (
             await client.post(f"/students/me/applications/{application_id}/withdraw")
         ).status_code == 404
+
+    async def test_scholarship_math(self, db_session):
+        """Slab lookup plus the per-form rule beyond the largest slab."""
+        from app.routers.payments import scholarship_for_count
+
+        await db_session.execute(
+            text(
+                "INSERT INTO scholarship_slabs (min_forms, discount_paise)"
+                " VALUES (1, 25000), (2, 60000)"
+            )
+        )
+        assert await scholarship_for_count(db_session, 0) == 0
+        assert await scholarship_for_count(db_session, 1) == 25000
+        assert await scholarship_for_count(db_session, 2) == 60000
+        # Beyond the largest slab: flat per-form rate.
+        assert await scholarship_for_count(db_session, 5) == 250000
+
+    async def test_quote_matches_the_later_charge_and_writes_nothing(
+        self, client: AsyncClient, a_student, two_courses, slabs, db_session
+    ):
+        """The number on screen must be computed by the code that charges."""
+        await client.post(
+            "/shortlists/",
+            json={
+                "college_id": two_courses["college_id"],
+                "course_id": two_courses["course_a"],
+            },
+        )
+        entry_id = (await client.get("/shortlists/")).json()[0]["id"]
+
+        response = await client.post(
+            "/payments/quote", json={"shortlist_ids": [entry_id]}
+        )
+        assert response.status_code == 200
+        assert response.json() == {
+            "item_count": 1,
+            "total_amount": 150000,
+            "discount_amount": 25000,
+            "amount": 125000,
+        }
+
+        orders = (
+            await db_session.execute(text("SELECT count(*) FROM orders"))
+        ).scalar_one()
+        assert orders == 0
+
+    async def test_create_order_applies_the_scholarship(
+        self, client: AsyncClient, a_student, two_courses, slabs, monkeypatch
+    ):
+        """
+        Two courses at 1500 + 2000 rupees = 350000 paise gross. The 2-form
+        slab takes 60000 off, so Razorpay is asked for 290000 — and the
+        response shows the maths, not just the charge.
+        """
+        monkeypatch.setattr(
+            "app.routers.payments.razorpay_client.order.create",
+            lambda payload: {"id": "order_scholarship", **payload},
+        )
+        for course in ("course_a", "course_b"):
+            await client.post(
+                "/shortlists/",
+                json={
+                    "college_id": two_courses["college_id"],
+                    "course_id": two_courses[course],
+                },
+            )
+        entries = (await client.get("/shortlists/")).json()
+
+        charged = []
+        monkeypatch.setattr(
+            "app.routers.payments.razorpay_client.order.create",
+            lambda payload: charged.append(payload["amount"])
+            or {"id": "order_scholarship", **payload},
+        )
+        response = await client.post(
+            "/payments/create-order",
+            json={"shortlist_ids": [e["id"] for e in entries]},
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["total_amount"] == 350000
+        assert body["discount_amount"] == 60000
+        assert body["amount"] == 290000
+        assert charged == [290000]
+
+    async def test_discounted_payment_still_creates_the_application(
+        self, client: AsyncClient, a_student, two_courses, slabs, db_session, monkeypatch
+    ):
+        """The webhook compares against the discounted total, not the gross."""
+        monkeypatch.setattr(
+            "app.routers.payments.razorpay_client.order.create",
+            lambda payload: {"id": "order_discounted", **payload},
+        )
+        await client.post(
+            "/shortlists/",
+            json={
+                "college_id": two_courses["college_id"],
+                "course_id": two_courses["course_a"],
+            },
+        )
+        entry_id = (await client.get("/shortlists/")).json()[0]["id"]
+        # One course at 1500 rupees, 1-form slab of 250: payable 149750.
+        order = await client.post(
+            "/payments/create-order", json={"shortlist_ids": [entry_id]}
+        )
+        assert order.json()["amount"] == 150000 - 25000
+
+        body = captured("order_discounted", 150000 - 25000, payment_id="pay_discounted")
+        result = await client.post(
+            "/payments/webhook",
+            content=body,
+            headers={"X-Razorpay-Signature": sign(body)},
+        )
+        assert result.json()["status"] == "ok"
+        count = (
+            await db_session.execute(text("SELECT count(*) FROM applications"))
+        ).scalar_one()
+        assert count == 1
+
+    async def test_fees_collected_are_net_of_scholarship(
+        self, client: AsyncClient, auth_as, a_student, two_courses, slabs,
+        db_session, monkeypatch,
+    ):
+        """A college dashboard must report money actually collected."""
+        monkeypatch.setattr(
+            "app.routers.payments.razorpay_client.order.create",
+            lambda payload: {"id": "order_net", **payload},
+        )
+        await client.post(
+            "/shortlists/",
+            json={
+                "college_id": two_courses["college_id"],
+                "course_id": two_courses["course_a"],
+            },
+        )
+        entry_id = (await client.get("/shortlists/")).json()[0]["id"]
+        await client.post("/payments/create-order", json={"shortlist_ids": [entry_id]})
+        body = captured("order_net", 150000 - 25000, payment_id="pay_net")
+        await client.post(
+            "/payments/webhook",
+            content=body,
+            headers={"X-Razorpay-Signature": sign(body)},
+        )
+
+        auth_as("uid-admin-net", role="admin")
+        detail = (
+            await client.get(f"/admin/colleges/{two_courses['college_id']}")
+        ).json()
+        assert detail["fees_collected"] == 150000 - 25000
+
+    async def test_closed_courses_cannot_be_ordered(
+        self, client: AsyncClient, a_student, two_courses, db_session, monkeypatch
+    ):
+        monkeypatch.setattr(
+            "app.routers.payments.razorpay_client.order.create",
+            lambda payload: {"id": "order_closed", **payload},
+        )
+        for course in ("course_a", "course_b"):
+            await client.post(
+                "/shortlists/",
+                json={
+                    "college_id": two_courses["college_id"],
+                    "course_id": two_courses[course],
+                },
+            )
+        entries = (await client.get("/shortlists/")).json()
+        # The first course closes after shortlisting: the order must refuse
+        # the stale item rather than charge for something that cannot be applied.
+        await db_session.execute(
+            text(
+                "UPDATE college_courses SET closing_date = now() - make_interval(days => 1)"
+                " WHERE id = :id"
+            ),
+            {"id": two_courses["course_a"]},
+        )
+        await db_session.commit()
+
+        response = await client.post(
+            "/payments/create-order",
+            json={"shortlist_ids": [e["id"] for e in entries]},
+        )
+        assert response.status_code == 409

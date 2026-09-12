@@ -126,9 +126,24 @@ docker compose up -d
 - `GET /admin/users`, `POST /admin/users`, `PATCH /admin/users/{user_id}`
 - `GET /admin/payments`
 - `GET /admin/audit`
+- `GET /admin/system` - live checks of the API, database, Firebase, Razorpay
 
 ### Health
-- `GET /health`
+- `GET /health` — always public; reports `dev_mode` for local tooling
+
+## Dev mode (no Firebase)
+
+With no service account configured in development, the API accepts
+self-described bearer tokens instead of Firebase JWTs:
+
+- `dev:student[:tag]`, `dev:admin[:tag]` — the tag makes you a new person
+- `dev:college:<college_id>`, `dev:coaching:<centre_id>`
+
+`GET /dev/directory` lists available organisations (dev mode only, 404
+otherwise). Role guards, ownership checks and rate limits all keep working —
+only the identity source changes. `DEV_MODE=1` forces this on even with keys
+present; staging and production refuse to boot with it. Payments are excluded
+on purpose: dev mode fakes identity, never money.
 
 ## Testing
 
@@ -152,6 +167,8 @@ configuration.
 | RAZORPAY_WEBHOOK_SECRET | Razorpay webhook secret |
 | CORS_ORIGINS | Comma-separated browser origins allowed to call the API |
 | ENVIRONMENT | `development`, `test`, `staging`, `production`, or `prod` |
+| LOG_LEVEL | `DEBUG`, `INFO`, `WARNING`, or `ERROR` (default `INFO`) |
+| DEV_MODE | `1` forces dev mode on even with keys; `0` forces it off even without them; unset auto-detects; refused outside development |
 
 ## Code Quality
 

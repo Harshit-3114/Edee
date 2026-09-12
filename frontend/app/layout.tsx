@@ -16,8 +16,8 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: 'Sahayak Admissions',
-    template: '%s · Sahayak Admissions',
+    default: 'Edee Apply',
+    template: '%s · Edee Apply',
   },
   description:
     'Search colleges, shortlist courses, and pay application fees for UG and PG admissions across India.',

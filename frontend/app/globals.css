@@ -176,6 +176,17 @@
   .rise {
     animation: rise 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
   }
+
+  /* Scroll reveals share the mount keyframes. The hidden base matches the
+     keyframes' first frame, so there is no jump when the animation starts. */
+  .reveal {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  .reveal.is-visible {
+    animation: rise 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

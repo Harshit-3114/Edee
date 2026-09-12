@@ -11,9 +11,20 @@ class CreateOrder(BaseModel):
 
 class CreateOrderResponse(BaseModel):
     order_id: str
-    amount: int  # paise
+    amount: int  # paise actually charged (gross minus scholarship)
+    total_amount: int  # gross quoted fees, paise
+    discount_amount: int  # scholarship applied, paise
     currency: str
     key_id: str
+
+
+class QuoteResponse(BaseModel):
+    """What an order WOULD cost. No Razorpay call, no rows written."""
+
+    item_count: int
+    total_amount: int  # paise
+    discount_amount: int  # paise
+    amount: int  # paise payable
 
 
 class VerifyPayment(BaseModel):

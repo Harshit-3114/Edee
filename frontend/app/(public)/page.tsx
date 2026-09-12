@@ -1,12 +1,19 @@
-import Image from 'next/image';
 import Link from 'next/link';
 import {
   ArrowRight,
   BookmarkSimple,
+  Buildings,
   CreditCard,
+  GraduationCap,
+  LockSimple,
   MagnifyingGlass,
+  UsersThree,
 } from '@phosphor-icons/react/dist/ssr';
 import LinkButton from '@/components/ui/LinkButton';
+import Reveal from '@/components/ui/Reveal';
+import SiteFooter from './_components/SiteFooter';
+import SiteHeader from './_components/SiteHeader';
+import { FAQS } from './_components/faqs';
 
 const STEPS = [
   {
@@ -26,27 +33,49 @@ const STEPS = [
   },
 ];
 
+const FLOW = [
+  {
+    icon: MagnifyingGlass,
+    title: 'Search courses',
+    body: 'Filter courses across streams, states and college types.',
+  },
+  {
+    icon: BookmarkSimple,
+    title: 'Shortlist what fits',
+    body: 'One list holds every course you want, with a running total.',
+  },
+  {
+    icon: LockSimple,
+    title: 'Pay once, securely',
+    body: 'A single Razorpay payment files all your applications.',
+  },
+];
+
+const AUDIENCES = [
+  {
+    icon: Buildings,
+    title: 'Colleges',
+    body: 'Publish courses and fees, review only the applications students have paid for, and keep your landing page current.',
+  },
+  {
+    icon: UsersThree,
+    title: 'Coaching centres',
+    body: 'Follow your batch from signup to admission with a read-only view of their shortlists and decisions.',
+  },
+];
+
 export default function LandingPage() {
   return (
     <div className="min-h-[100dvh]">
-      <header className="border-b border-[var(--line)]">
-        <nav
-          aria-label="Main"
-          className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6"
-        >
-          <Link href="/" className="text-sm font-semibold tracking-tight">
-            Sahayak
-          </Link>
-          <LinkButton href="/login" size="sm">
-            Sign in
-          </LinkButton>
-        </nav>
-      </header>
+      <SiteHeader />
 
       <main id="main">
         <section className="mx-auto grid max-w-6xl items-center gap-10 px-6 pt-16 pb-20 lg:grid-cols-[1.05fr_1fr] lg:pt-24">
-          <div>
-            <h1 className="max-w-[15ch] text-4xl leading-[1.08] font-semibold tracking-tight md:text-5xl lg:text-6xl">
+          <div className="rise">
+            <p className="text-[13px] font-medium tracking-wide text-[var(--accent-text)] uppercase">
+              UG and PG admissions, in one place
+            </p>
+            <h1 className="mt-3 max-w-[15ch] text-4xl leading-[1.08] font-semibold tracking-tight md:text-5xl lg:text-6xl">
               Apply to every college on one list
             </h1>
             <p className="mt-5 max-w-[48ch] text-base leading-relaxed text-[var(--text-secondary)]">
@@ -58,88 +87,192 @@ export default function LandingPage() {
                 Get started
                 <ArrowRight size={15} weight="bold" />
               </LinkButton>
-              <LinkButton href="/login" variant="secondary">
-                College or coaching sign in
+              <LinkButton href="#how-it-works" variant="secondary">
+                See how it works
               </LinkButton>
             </div>
           </div>
 
-          <div className="relative aspect-[4/3] overflow-hidden rounded-lg border border-[var(--line)]">
-            <Image
-              src="https://picsum.photos/seed/india-university-campus-students/1200/900"
-              alt="Students walking through a university campus"
-              fill
-              priority
-              sizes="(max-width: 1024px) 100vw, 46vw"
-              className="object-cover"
-            />
+          <div
+            aria-label="How Edee Apply works: search courses, shortlist what fits, pay once securely"
+            role="img"
+            className="rise rounded-lg border border-[var(--line)] bg-[var(--surface-sunken)] p-5 sm:p-6"
+            style={{ animationDelay: '120ms' }}
+          >
+            <div className="flex flex-col gap-3">
+              {FLOW.map(({ icon: Icon, title, body }, index) => (
+                <div key={title} className="relative flex gap-4">
+                  {index < FLOW.length - 1 && (
+                    <span
+                      aria-hidden="true"
+                      className="absolute top-11 bottom-[-14px] left-[17px] w-px bg-[var(--line-strong)]"
+                    />
+                  )}
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--surface-raised)] text-[var(--accent-text)] ring-1 ring-[var(--line-strong)]">
+                    <Icon size={18} aria-hidden="true" />
+                  </span>
+                  <span className="min-w-0 flex-1 rounded-lg border border-[var(--line)] bg-[var(--surface-raised)] p-4 shadow-[var(--shadow-sm)]">
+                    <span className="block text-sm font-medium">
+                      {index + 1}. {title}
+                    </span>
+                    <span className="mt-1 block text-[13px] leading-relaxed text-[var(--text-secondary)]">
+                      {body}
+                    </span>
+                  </span>
+                </div>
+              ))}
+              <div className="flex items-center justify-between gap-3 rounded-lg bg-[var(--accent)] p-4 text-[var(--text-inverse)] shadow-[var(--shadow-md)]">
+                <span className="flex items-center gap-2 text-sm font-medium">
+                  <GraduationCap size={16} aria-hidden="true" />
+                  One list, one payment, every application tracked
+                </span>
+                <ArrowRight size={15} weight="bold" aria-hidden="true" />
+              </div>
+            </div>
           </div>
         </section>
 
         <section
-          aria-labelledby="how-it-works"
-          className="border-t border-[var(--line)] bg-[var(--surface-sunken)]"
+          id="how-it-works"
+          aria-labelledby="how-it-works-heading"
+          className="scroll-mt-16 border-t border-[var(--line)] bg-[var(--surface-sunken)]"
         >
           <div className="mx-auto max-w-6xl px-6 py-16 lg:py-20">
-            <h2 id="how-it-works" className="text-2xl font-semibold tracking-tight">
-              Three steps, one payment
-            </h2>
+            <Reveal>
+              <h2
+                id="how-it-works-heading"
+                className="text-2xl font-semibold tracking-tight"
+              >
+                Three steps, one payment
+              </h2>
+            </Reveal>
 
             <div className="mt-10 grid gap-x-10 gap-y-8 sm:grid-cols-2 lg:grid-cols-3">
-              {STEPS.map(({ icon: Icon, title, body }) => (
-                <div key={title} className="border-t border-[var(--line-strong)] pt-5">
-                  <Icon size={20} className="text-[var(--accent-text)]" aria-hidden="true" />
-                  <h3 className="mt-3 text-base font-medium">{title}</h3>
-                  <p className="mt-2 text-sm leading-relaxed text-[var(--text-secondary)]">
-                    {body}
-                  </p>
-                </div>
+              {STEPS.map(({ icon: Icon, title, body }, index) => (
+                <Reveal key={title} delay={index * 90}>
+                  <div className="border-t border-[var(--line-strong)] pt-5">
+                    <Icon size={20} className="text-[var(--accent-text)]" aria-hidden="true" />
+                    <h3 className="mt-3 text-base font-medium">{title}</h3>
+                    <p className="mt-2 text-sm leading-relaxed text-[var(--text-secondary)]">
+                      {body}
+                    </p>
+                  </div>
+                </Reveal>
               ))}
             </div>
           </div>
         </section>
 
-        <section className="mx-auto max-w-6xl px-6 py-16 lg:py-24">
-          <div className="grid items-center gap-10 lg:grid-cols-[1fr_1.05fr]">
-            <div className="relative aspect-[3/2] overflow-hidden rounded-lg border border-[var(--line)] lg:order-last">
-              <Image
-                src="https://picsum.photos/seed/college-admissions-office-desk/1000/667"
-                alt="An admissions office reviewing applications"
-                fill
-                sizes="(max-width: 1024px) 100vw, 46vw"
-                className="object-cover"
-              />
-            </div>
-
-            <div>
-              <h2 className="max-w-[18ch] text-2xl font-semibold tracking-tight md:text-3xl">
-                Colleges and coaching centres work here too
-              </h2>
-              <p className="mt-4 max-w-[52ch] text-sm leading-relaxed text-[var(--text-secondary)]">
-                Colleges manage their courses and review applicants as fees clear. Coaching
-                centres follow their batch from signup to admission. Each gets its own
-                sign-in, created by the platform team.
-              </p>
-              <p className="mt-6 text-sm">
-                <Link
-                  href="/login"
-                  className="inline-flex items-center gap-1.5 font-medium text-[var(--accent-text)] underline underline-offset-4"
+        <section
+          aria-labelledby="who-its-for"
+          className="mx-auto max-w-6xl px-6 py-16 lg:py-24"
+        >
+          <div className="grid items-start gap-10 lg:grid-cols-[1fr_1.05fr]">
+            <Reveal>
+              <div>
+                <h2
+                  id="who-its-for"
+                  className="max-w-[18ch] text-2xl font-semibold tracking-tight md:text-3xl"
                 >
-                  Sign in to your portal
-                  <ArrowRight size={14} weight="bold" />
-                </Link>
-              </p>
+                  Built for students first
+                </h2>
+                <p className="mt-4 max-w-[52ch] text-sm leading-relaxed text-[var(--text-secondary)]">
+                  One dashboard holds your shortlist, your payments, and every decision a
+                  college makes. Withdraw anything undecided, and never pay twice for the
+                  same course.
+                </p>
+                <p className="mt-6">
+                  <LinkButton href="/login">
+                    Start your shortlist
+                    <ArrowRight size={15} weight="bold" />
+                  </LinkButton>
+                </p>
+              </div>
+            </Reveal>
+
+            <div className="flex flex-col gap-4">
+              {AUDIENCES.map(({ icon: Icon, title, body }, index) => (
+                <Reveal key={title} delay={index * 90}>
+                  <div className="rounded-lg border border-[var(--line)] bg-[var(--surface-raised)] p-5">
+                    <h3 className="flex items-center gap-2 text-base font-medium">
+                      <Icon size={18} className="text-[var(--accent-text)]" aria-hidden="true" />
+                      {title}
+                    </h3>
+                    <p className="mt-2 text-sm leading-relaxed text-[var(--text-secondary)]">
+                      {body}
+                    </p>
+                  </div>
+                </Reveal>
+              ))}
             </div>
           </div>
         </section>
+
+        <section
+          aria-labelledby="faq"
+          className="border-t border-[var(--line)] bg-[var(--surface-sunken)]"
+        >
+          <div className="mx-auto max-w-3xl px-6 py-16 lg:py-20">
+            <Reveal>
+              <h2 id="faq" className="text-2xl font-semibold tracking-tight">
+                Questions, answered
+              </h2>
+            </Reveal>
+            <div className="mt-8 flex flex-col gap-3">
+              {FAQS.map((faq) => (
+                <Reveal key={faq.question}>
+                  <details className="group rounded-lg border border-[var(--line)] bg-[var(--surface-raised)] px-5 py-4">
+                    <summary className="cursor-pointer text-[15px] font-medium marker:text-[var(--accent-text)]">
+                      {faq.question}
+                    </summary>
+                    <p className="mt-2 text-sm leading-relaxed text-[var(--text-secondary)]">
+                      {faq.answer}
+                    </p>
+                  </details>
+                </Reveal>
+              ))}
+            </div>
+            <Reveal>
+              <p className="mt-6 text-sm">
+                <Link
+                  href="/faq"
+                  className="inline-flex items-center gap-1.5 font-medium text-[var(--accent-text)] underline underline-offset-4"
+                >
+                  Read all frequently asked questions
+                  <ArrowRight size={14} weight="bold" />
+                </Link>
+              </p>
+            </Reveal>
+          </div>
+        </section>
+
+        <section aria-labelledby="get-started" className="mx-auto max-w-6xl px-6 py-16 lg:py-24">
+          <Reveal>
+            <div className="grid items-center gap-8 rounded-lg bg-[var(--accent)] px-8 py-10 text-[var(--text-inverse)] sm:px-12 lg:grid-cols-[1.2fr_1fr]">
+              <div>
+                <h2 id="get-started" className="text-2xl font-semibold tracking-tight md:text-3xl">
+                  Your shortlist is waiting
+                </h2>
+                <p className="mt-3 max-w-[48ch] text-sm leading-relaxed opacity-90">
+                  Sign in, save the courses you want, and pay once. Colleges see your
+                  application the moment payment clears.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-3 lg:justify-end">
+                <LinkButton
+                  href="/login"
+                  className="border-transparent bg-[var(--surface-raised)] text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
+                >
+                  Get started
+                  <ArrowRight size={15} weight="bold" />
+                </LinkButton>
+              </div>
+            </div>
+          </Reveal>
+        </section>
       </main>
 
-      <footer className="border-t border-[var(--line)]">
-        <div className="mx-auto flex max-w-6xl flex-col gap-2 px-6 py-8 text-[13px] text-[var(--text-muted)] sm:flex-row sm:items-center sm:justify-between">
-          <p>Sahayak Admissions</p>
-          <p>Application fees are set by each college and are not refundable.</p>
-        </div>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }

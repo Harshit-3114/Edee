@@ -4,9 +4,11 @@ import { useCallback, useEffect, useState } from 'react';
 import PageHeader from '@/components/shells/PageHeader';
 import LinkButton from '@/components/ui/LinkButton';
 import StatTile, { StatRow } from '@/components/ui/StatTile';
+import { Panel } from '@/components/ui/DetailList';
 import { ErrorState, Skeleton } from '@/components/ui/States';
 import api, { apiErrorMessage } from '@/lib/api';
-import { formatFee } from '@/lib/format';
+import { formatDate, formatFee } from '@/lib/format';
+import type { AuditEvent, PaymentRow } from '@/lib/types';
 
 interface AdminSummary {
   students: number;
@@ -18,14 +20,22 @@ interface AdminSummary {
 
 export default function AdminDashboardPage() {
   const [summary, setSummary] = useState<AdminSummary | null>(null);
+  const [payments, setPayments] = useState<PaymentRow[]>([]);
+  const [events, setEvents] = useState<AuditEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await api.get<AdminSummary>('/admin/dashboard');
-      setSummary(data);
+      const [summaryRes, paymentsRes, eventsRes] = await Promise.all([
+        api.get<AdminSummary>('/admin/dashboard'),
+        api.get<PaymentRow[]>('/admin/payments', { params: { limit: 5 } }),
+        api.get<AuditEvent[]>('/admin/audit', { params: { limit: 5 } }),
+      ]);
+      setSummary(summaryRes.data);
+      setPayments(paymentsRes.data);
+      setEvents(eventsRes.data);
       setError('');
     } catch (err) {
       setError(apiErrorMessage(err, 'Could not load the overview.'));
@@ -75,6 +85,69 @@ export default function AdminDashboardPage() {
               value={formatFee(summary.revenue)}
               note="Verified payments only"
             />
+          </div>
+
+          <div className="mt-4 grid gap-4 lg:grid-cols-2">
+            <Panel
+              title="Latest payments"
+              action={
+                <LinkButton href="/admin/payments" variant="ghost" size="sm">
+                  Full ledger
+                </LinkButton>
+              }
+            >
+              {payments.length === 0 ? (
+                <p className="text-sm text-[var(--text-secondary)]">No payments yet.</p>
+              ) : (
+                <ul className="flex flex-col divide-y divide-[var(--line)]">
+                  {payments.map((payment) => (
+                    <li
+                      key={payment.id}
+                      className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-2.5"
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-medium">
+                          {payment.student_name}
+                        </span>
+                        <span className="tabular block text-xs text-[var(--text-muted)]">
+                          {payment.razorpay_payment_id} · {payment.status}
+                        </span>
+                      </span>
+                      <span className="tabular text-sm font-medium">
+                        {formatFee(payment.amount)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Panel>
+
+            <Panel
+              title="Recent activity"
+              action={
+                <LinkButton href="/admin/audit" variant="ghost" size="sm">
+                  Full audit trail
+                </LinkButton>
+              }
+            >
+              {events.length === 0 ? (
+                <p className="text-sm text-[var(--text-secondary)]">No events yet.</p>
+              ) : (
+                <ul className="flex flex-col divide-y divide-[var(--line)]">
+                  {events.map((event) => (
+                    <li
+                      key={event.id}
+                      className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-2.5"
+                    >
+                      <span className="tabular text-sm font-medium">{event.action}</span>
+                      <span className="text-xs text-[var(--text-muted)]">
+                        {event.actor_role ?? 'system'} · {formatDate(event.created_at)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Panel>
           </div>
         </>
       )}

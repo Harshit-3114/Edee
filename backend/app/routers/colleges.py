@@ -19,7 +19,9 @@ def _with_gallery(row: Any) -> dict:
 
 
 @router.get("/")
+@limited("60/minute")
 async def list_colleges(
+    request: Request,
     # Literal rather than str: an unconstrained value reaches the query planner
     # and shows up in logs, and "UG or PG" in a docstring is not a check.
     stream: Optional[Literal["UG", "PG"]] = Query(None),
@@ -28,15 +30,14 @@ async def list_colleges(
     search: Optional[str] = Query(None, max_length=120),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
-    user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """
     Colleges with their open courses nested, newest filter wins.
 
-    Every role may read this: a college checking how it appears, a coaching
-    centre advising a student, an admin doing support. It carries no personal
-    data, so there is nothing to scope.
+    Public, like the landing pages: college discovery is top-of-funnel, and
+    this carries no personal data, so there is nothing to scope. A modest
+    rate limit applies because anonymous callers are the cheapest to abuse.
 
     Fees are returned in **paise**. They are stored in rupees, and converting
     at the edge keeps one unit in every response and in the payment flow.
@@ -95,8 +96,9 @@ async def list_colleges(
                                'stream', cc.stream,
                                'duration_years', cc.duration_years,
                                'seats', cc.seats,
-                               'application_fee', cc.application_fee * 100,
-                               'active', cc.active
+                                'application_fee', cc.application_fee * 100,
+                                'active', cc.active,
+                                'closing_date', cc.closing_date
                            )
                            ORDER BY cc.course_name
                        ) FILTER (WHERE cc.id IS NOT NULL),
@@ -146,8 +148,9 @@ async def get_college(
                                'stream', cc.stream,
                                'duration_years', cc.duration_years,
                                'seats', cc.seats,
-                               'application_fee', cc.application_fee * 100,
-                               'active', cc.active
+                                'application_fee', cc.application_fee * 100,
+                                'active', cc.active,
+                                'closing_date', cc.closing_date
                            )
                            ORDER BY cc.course_name
                        ) FILTER (WHERE cc.id IS NOT NULL),
@@ -215,8 +218,9 @@ async def get_college_by_slug(
                                'stream', cc.stream,
                                'duration_years', cc.duration_years,
                                'seats', cc.seats,
-                               'application_fee', cc.application_fee * 100,
-                               'active', cc.active
+                                'application_fee', cc.application_fee * 100,
+                                'active', cc.active,
+                                'closing_date', cc.closing_date
                            )
                            ORDER BY cc.course_name
                        ) FILTER (WHERE cc.id IS NOT NULL),

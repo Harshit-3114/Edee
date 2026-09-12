@@ -21,6 +21,7 @@ const college: College = {
       duration_years: 4,
       seats: 120,
       application_fee: 150000,
+      closing_date: null,
       active: true,
     },
     {
@@ -31,6 +32,7 @@ const college: College = {
       duration_years: 4,
       seats: 60,
       application_fee: 120000,
+      closing_date: null,
       active: false,
     },
   ],
@@ -91,5 +93,17 @@ describe('CollegeCard', () => {
       />,
     );
     expect(screen.getByText(/no courses are open/i)).toBeInTheDocument();
+  });
+
+  it('links to the public landing page when the listing carries a slug', () => {
+    setup({ college: { ...college, slug: 'fergusson-college' } });
+    expect(
+      screen.getByRole('link', { name: /public landing page/i }),
+    ).toHaveAttribute('href', '/colleges/fergusson-college');
+  });
+
+  it('shows no landing link when the listing has no slug', () => {
+    setup();
+    expect(screen.queryByRole('link', { name: /public landing page/i })).not.toBeInTheDocument();
   });
 });

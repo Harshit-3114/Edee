@@ -93,3 +93,34 @@ class TestShortlists:
     async def test_removing_an_unknown_id_is_a_404(self, client: AsyncClient, a_student):
         response = await client.delete("/shortlists/00000000-0000-0000-0000-000000000001")
         assert response.status_code == 404
+
+    async def test_a_closed_course_is_refused_with_its_own_message(
+        self, client: AsyncClient, a_student, seed_college, db_session
+    ):
+        """A passed closing date is a 409 that names the reason, not a 404."""
+        from sqlalchemy import text
+
+        await db_session.execute(
+            text(
+                "UPDATE college_courses SET closing_date = now() - make_interval(days => 1)"
+            )
+        )
+        await db_session.commit()
+
+        response = await client.post("/shortlists/", json=seed_college)
+        assert response.status_code == 409
+        assert "closed" in response.json()["detail"]
+
+    async def test_an_open_closing_date_does_not_block(
+        self, client: AsyncClient, a_student, seed_college, db_session
+    ):
+        from sqlalchemy import text
+
+        await db_session.execute(
+            text(
+                "UPDATE college_courses SET closing_date = now() + make_interval(days => 30)"
+            )
+        )
+        await db_session.commit()
+
+        assert (await client.post("/shortlists/", json=seed_college)).status_code == 201

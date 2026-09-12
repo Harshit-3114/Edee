@@ -59,7 +59,7 @@ export default function PortalShell({
         className="border-b border-[var(--line)] bg-[var(--surface-raised)] md:sticky md:top-0 md:!block md:h-[100dvh] md:border-r md:border-b-0"
       >
         <div className="hidden items-baseline gap-2 px-5 py-5 md:flex">
-          <span className="text-sm font-semibold tracking-tight">Sahayak</span>
+          <span className="text-sm font-semibold tracking-tight">Edee Apply</span>
           <span className="text-[13px] text-[var(--text-muted)]">
             {PORTAL_LABEL[role]}
           </span>

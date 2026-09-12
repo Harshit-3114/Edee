@@ -126,6 +126,12 @@ async def create_student(
 
     await db.commit()
 
+    logger.info(
+        "student signed up id=%s stream=%s invite=%s",
+        student_id,
+        body.stream,
+        bool(body.invite_code),
+    )
     return {"id": student_id, "name": body.name.strip(), "stream": body.stream}
 
 

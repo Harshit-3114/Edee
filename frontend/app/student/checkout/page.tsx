@@ -12,7 +12,7 @@ import { EmptyState, ErrorState, LoadingList } from '@/components/ui/States';
 import { useAuth } from '@/hooks/useAuth';
 import { useShortlist } from '@/hooks/useShortlist';
 import api, { apiErrorMessage } from '@/lib/api';
-import type { OrderResponse } from '@/lib/types';
+import type { OrderQuote, OrderResponse } from '@/lib/types';
 
 /** Razorpay attaches itself to window. Only the fields this page uses. */
 interface RazorpayInstance {
@@ -43,12 +43,37 @@ export default function CheckoutPage() {
   const [phase, setPhase] = useState<Phase>('idle');
   const [error, setError] = useState('');
   const [scriptReady, setScriptReady] = useState(false);
+  const [quote, setQuote] = useState<OrderQuote | null>(null);
 
   const busy = phase === 'creating' || phase === 'paying' || phase === 'verifying';
 
   useEffect(() => {
     if (phase === 'done') router.replace('/student/dashboard?paid=1');
   }, [phase, router]);
+
+  // Price preview from the same code that will charge: totals, scholarship
+  // and payable, before any money moves. Falls back to the client-side sum
+  // when the quote cannot be fetched; create-order re-prices regardless.
+  useEffect(() => {
+    if (entries.length === 0) {
+      setQuote(null);
+      return;
+    }
+    let cancelled = false;
+    api
+      .post<OrderQuote>('/payments/quote', {
+        shortlist_ids: entries.map((entry) => entry.id),
+      })
+      .then(({ data }) => {
+        if (!cancelled) setQuote(data);
+      })
+      .catch(() => {
+        if (!cancelled) setQuote(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [entries]);
 
   const pay = useCallback(async () => {
     setError('');
@@ -78,7 +103,7 @@ export default function CheckoutPage() {
       order_id: order.order_id,
       amount: order.amount,
       currency: order.currency,
-      name: 'Sahayak Admissions',
+      name: 'Edee Apply',
       description: `${entries.length} application${entries.length === 1 ? '' : 's'}`,
       prefill: {
         name: user?.displayName ?? undefined,
@@ -162,7 +187,7 @@ export default function CheckoutPage() {
 
       {!loading && !listError && entries.length > 0 && (
         <div className="flex flex-col gap-5">
-          <CheckoutSummary entries={entries} total={total} />
+          <CheckoutSummary entries={entries} total={total} quote={quote} />
 
           {error && <ErrorState message={error} />}
 

@@ -1,6 +1,7 @@
 from pydantic import BaseModel
 from uuid import UUID
 from datetime import datetime
+from typing import Optional
 
 
 class ShortlistAdd(BaseModel):
@@ -20,4 +21,5 @@ class ShortlistResponse(BaseModel):
     course_name: str
     stream: str
     application_fee: int  # paise
+    closing_date: Optional[datetime] = None
     created_at: datetime

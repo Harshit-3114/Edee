@@ -13,12 +13,15 @@ from uuid import UUID, uuid4
 from typing import Literal, Optional
 from datetime import datetime, timezone
 from pydantic import BaseModel, Field
+import logging
 import secrets
 
 from app.db.connection import get_db
 from app.middleware.auth import current_coaching_centre_id
 
 router = APIRouter()
+
+logger = logging.getLogger(__name__)
 
 STAGE_SQL = """
     CASE
@@ -167,7 +170,8 @@ async def get_student(
             """
             SELECT sl.id, sl.college_id, sl.course_id, c.name AS college_name,
                    cc.course_name, c.city, c.state, cc.stream,
-                   cc.application_fee * 100 AS application_fee, sl.created_at
+                   cc.application_fee * 100 AS application_fee, cc.closing_date,
+                   sl.created_at
             FROM shortlists sl
             JOIN colleges c         ON c.id = sl.college_id
             JOIN college_courses cc ON cc.id = sl.course_id
@@ -251,6 +255,7 @@ async def create_invite(
         },
     )
     await db.commit()
+    logger.info("invite created centre=%s max_uses=%d", centre_id, body.max_uses)
     return {"id": str(invite_id), "code": code}
 
 

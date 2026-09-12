@@ -4,12 +4,41 @@ import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import type { User } from 'firebase/auth';
+import {
+  Buildings,
+  GraduationCap,
+  ShieldCheck,
+  UsersThree,
+} from '@phosphor-icons/react/dist/ssr';
 import GoogleSignIn from '@/components/auth/GoogleSignIn';
+import DevSignIn from '@/components/auth/DevSignIn';
 import PhoneOTPForm from '@/components/auth/PhoneOTPForm';
+import Button from '@/components/ui/Button';
 import { ErrorState, Skeleton } from '@/components/ui/States';
 import { useAuth } from '@/hooks/useAuth';
-import { PORTAL_HOME, roleForPath } from '@/lib/portals';
+import {
+  PORTAL_HOME,
+  PORTAL_LABEL,
+  isRole,
+  resolvePostLoginDestination,
+  type Role,
+} from '@/lib/portals';
 import { syncSessionCookie } from '@/lib/session';
+
+const PORTAL_OPTIONS: { role: Role; hint: string; Icon: typeof GraduationCap }[] = [
+  { role: 'student', hint: 'Applications & payments', Icon: GraduationCap },
+  { role: 'college', hint: 'Applicants & courses', Icon: Buildings },
+  { role: 'coaching', hint: 'Cohort progress', Icon: UsersThree },
+  { role: 'admin', hint: 'Platform staff only', Icon: ShieldCheck },
+];
+
+const PORTAL_HELP: Record<Role, string> = {
+  student: 'Sign in with Google or your mobile number to reach your applications.',
+  college: 'Use the account your college provided. New college accounts are created by the platform team.',
+  coaching:
+    'Use the account your coaching centre provided. New centre accounts are created by the platform team.',
+  admin: 'Platform staff only. Your account already carries the admin role.',
+};
 
 function LoginForm() {
   const router = useRouter();
@@ -17,25 +46,43 @@ function LoginForm() {
   const { user, loading } = useAuth();
   const [error, setError] = useState('');
   const [routing, setRouting] = useState(false);
+  const [wrongPortal, setWrongPortal] = useState<Role | null>(null);
+
+  const next = params.get('next');
+  const picked = params.get('portal');
+  const portal: Role = isRole(picked) ? picked : 'student';
+
+  function pick(nextPortal: Role) {
+    setWrongPortal(null);
+    setError('');
+    const search = new URLSearchParams();
+    search.set('portal', nextPortal);
+    if (next) search.set('next', next);
+    router.replace(`/login?${search.toString()}`);
+  }
 
   async function route(signedIn: User) {
     setRouting(true);
     const role = await syncSessionCookie(signedIn);
+    const action = resolvePostLoginDestination(role, portal, next);
 
-    if (!role) {
+    if (action.kind === 'signup') {
       // A Firebase account with no role claim is a student who has not
       // finished signing up. Staff accounts always arrive with a claim.
       router.replace('/signup');
       return;
     }
-
-    // Honour ?next= only when the path belongs to this user's own portal.
-    const next = params.get('next');
-    if (next && roleForPath(next) === role) {
-      router.replace(next);
+    if (action.kind === 'mismatch') {
+      // Signed in fine, wrong door: say so and offer the right one instead
+      // of silently landing them somewhere they did not ask for.
+      setWrongPortal(action.actual);
+      setError(
+        `This account belongs to the ${PORTAL_LABEL[action.actual]} portal, not ${PORTAL_LABEL[portal]}.`,
+      );
+      setRouting(false);
       return;
     }
-    router.replace(PORTAL_HOME[role]);
+    router.replace(action.path);
   }
 
   // Already signed in? Do not make them do it twice.
@@ -56,6 +103,36 @@ function LoginForm() {
 
   return (
     <>
+      <div role="group" aria-label="Choose your portal" className="grid grid-cols-2 gap-2">
+        {PORTAL_OPTIONS.map(({ role, hint, Icon }) => {
+          const selected = role === portal;
+          return (
+            <button
+              key={role}
+              type="button"
+              aria-pressed={selected}
+              onClick={() => pick(role)}
+              className={[
+                'flex items-center gap-2.5 rounded-lg border px-3 py-2.5 text-left transition-colors duration-150',
+                selected
+                  ? 'border-[var(--accent-line)] bg-[var(--accent-subtle)]'
+                  : 'border-[var(--line)] bg-[var(--surface-raised)] hover:bg-[var(--surface-hover)]',
+              ].join(' ')}
+            >
+              <Icon
+                size={20}
+                aria-hidden="true"
+                className={selected ? 'text-[var(--accent-text)]' : 'text-[var(--text-secondary)]'}
+              />
+              <span className="min-w-0">
+                <span className="block text-sm font-medium">{PORTAL_LABEL[role]}</span>
+                <span className="block truncate text-xs text-[var(--text-muted)]">{hint}</span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
       <PhoneOTPForm onSuccess={route} onError={setError} />
 
       <div className="flex items-center gap-3 text-xs text-[var(--text-muted)]">
@@ -67,6 +144,11 @@ function LoginForm() {
       <GoogleSignIn onSuccess={route} onError={setError} />
 
       {error && <ErrorState message={error} />}
+      {wrongPortal && (
+        <Button type="button" onClick={() => router.replace(PORTAL_HOME[wrongPortal])}>
+          Continue to the {PORTAL_LABEL[wrongPortal]} portal
+        </Button>
+      )}
     </>
   );
 }
@@ -79,17 +161,20 @@ export default function LoginClient() {
     >
       <div>
         <Link href="/" className="text-sm font-semibold tracking-tight">
-          Sahayak
+          Edee Apply
         </Link>
         <h1 className="mt-6 text-2xl font-semibold tracking-tight">Sign in</h1>
-        <p className="mt-2 text-sm leading-relaxed text-[var(--text-secondary)]">
-          Students, colleges, coaching centres and platform staff all sign in here. You
-          land in the right place automatically.
-        </p>
+        <Suspense fallback={null}>
+          <PortalHelp />
+        </Suspense>
       </div>
 
       <Suspense fallback={<Skeleton className="h-24 w-full" />}>
         <LoginForm />
+      </Suspense>
+
+      <Suspense fallback={null}>
+        <DevSignIn />
       </Suspense>
 
       <p className="text-[13px] leading-relaxed text-[var(--text-muted)]">
@@ -97,5 +182,18 @@ export default function LoginClient() {
         College and coaching accounts are created by the platform team.
       </p>
     </main>
+  );
+}
+
+/** Portal-specific guidance under the heading. Separate component so it can
+ *  read the search params inside its own Suspense boundary. */
+function PortalHelp() {
+  const params = useSearchParams();
+  const picked = params.get('portal');
+  const portal: Role = isRole(picked) ? picked : 'student';
+  return (
+    <p className="mt-2 text-sm leading-relaxed text-[var(--text-secondary)]">
+      {PORTAL_HELP[portal]}
+    </p>
   );
 }

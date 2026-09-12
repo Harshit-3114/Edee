@@ -15,6 +15,7 @@ const entries: ShortlistEntry[] = [
     state: 'Maharashtra',
     stream: 'UG',
     application_fee: 90000,
+    closing_date: null,
     created_at: '2026-06-01T10:00:00Z',
   },
   {
@@ -27,6 +28,7 @@ const entries: ShortlistEntry[] = [
     state: 'Maharashtra',
     stream: 'UG',
     application_fee: 125000,
+    closing_date: null,
     created_at: '2026-06-02T10:00:00Z',
   },
 ];

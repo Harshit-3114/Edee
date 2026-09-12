@@ -11,12 +11,8 @@ const nextConfig: NextConfig = {
   // pin tracing to the frontend directory as the warning itself suggests.
   outputFileTracingRoot: path.join(__dirname),
 
-  images: {
-    remotePatterns: [
-      { protocol: 'https', hostname: 'picsum.photos' },
-      { protocol: 'https', hostname: 'cdn.simpleicons.org' },
-    ],
-  },
+  // No remote images: college artwork arrives as college-supplied URLs and
+  // renders on plain <img>, never through the optimizer.
 
   // All API calls go to FastAPI, never to Next.js route handlers.
   async rewrites() {

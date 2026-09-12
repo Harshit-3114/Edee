@@ -10,7 +10,7 @@ rem    2. Starts Docker Desktop if needed, clears a stale DB container if one
 rem       exists, then starts Postgres published on host port 5433.
 rem    3. Creates backend\.env if missing and installs backend\venv dependencies.
 rem    4. Creates frontend\.env.local if missing and installs node_modules.
-rem    5. Waits for Postgres health, runs Alembic migrations, seeds colleges.
+rem    5. Waits for Postgres health, runs Alembic migrations, seeds colleges and scholarship slabs.
 rem    6. Seeds demo role accounts only when a Firebase service account exists.
 rem    7. Launches the backend (port 8000) and frontend (port 3000), waits for
 rem       both to respond, then prints the local URLs.
@@ -248,6 +248,13 @@ if errorlevel 1 (
     echo [WARN] College seed failed. You can re-run it later with:
     echo        "%BACKEND%\venv\Scripts\python.exe" -m seeds.colleges
 )
+
+echo [..] Seeding scholarship slabs...
+"%BACKEND%\venv\Scripts\python.exe" -m seeds.scholarships
+if errorlevel 1 (
+    echo [WARN] Scholarship seed failed. Checkout will charge full fees until it runs:
+    echo        "%BACKEND%\venv\Scripts\python.exe" -m seeds.scholarships
+)
 popd
 
 rem ---------------------------------------------------------------------------
@@ -301,6 +308,27 @@ goto backend_check_done
 echo [WARN] Backend did not respond within 90 seconds. Check the backend server window for errors.
 :backend_check_done
 
+rem Ask the running backend whether dev mode is on, and say so loudly.
+rem A dev-mode backend accepts dev: tokens from anyone holding the URL.
+rem Two plain substring matches keep this free of quote-escaping traps.
+powershell -NoProfile -Command "try { (Invoke-WebRequest -UseBasicParsing -TimeoutSec 5 'http://localhost:8000/health').Content } catch { '' }" > "%TEMP%\edee-health.json" 2>nul
+findstr /c:"dev_mode" "%TEMP%\edee-health.json" >nul
+if not errorlevel 1 (
+    findstr /c:"true" "%TEMP%\edee-health.json" >nul
+    if not errorlevel 1 (
+        echo.
+        echo ============================================================
+        echo   DEV MODE - the backend accepts dev tokens, no Firebase needed.
+        echo   Anyone opening these URLs can sign in with any values.
+        echo   Add the missing API keys for production mode: backend Firebase
+        echo   service account and Razorpay keys, frontend Firebase web config.
+        echo   Or force it any time with backend DEV_MODE=1.
+        echo ============================================================
+        echo.
+    )
+)
+del "%TEMP%\edee-health.json" 2>nul
+
 echo [..] Waiting for the frontend to respond...
 set /a "FRONTEND_WAITS=0"
 :wait_frontend
@@ -339,9 +367,10 @@ echo     Coaching     http://localhost:3000/coaching/dashboard
 echo     Admin        http://localhost:3000/admin/dashboard
 echo ============================================================
 echo.
-echo NOTE: Local testing needs no API keys. Sign-in, role assignment, and
-echo       payments stay disabled until real Firebase and Razorpay credentials
-echo       are added to backend\.env and frontend\.env.local.
+echo NOTE: Without API keys the backend runs in DEV MODE - sign in on the
+echo       login page with a developer token, no Firebase needed. Payments
+echo       stay disabled until real Razorpay keys are added. Add the missing
+echo       API keys for production mode.
 echo.
 
 pause

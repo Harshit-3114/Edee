@@ -1,5 +1,6 @@
 from pydantic import BaseModel
 from uuid import UUID
+from datetime import datetime
 from typing import List, Optional
 import json
 
@@ -50,6 +51,7 @@ class CollegeCourseResponse(BaseModel):
     duration_years: Optional[int]
     seats: Optional[int]
     application_fee: int
+    closing_date: Optional[datetime] = None
 
 
 class CollegeResponse(BaseModel):

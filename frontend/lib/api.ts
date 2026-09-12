@@ -4,6 +4,8 @@ import axios, {
   type InternalAxiosRequestConfig,
 } from 'axios';
 import { tryGetFirebaseAuth } from './firebase';
+import { getDevToken } from './devSession';
+import { logger } from './logger';
 
 type RetriableConfig = InternalAxiosRequestConfig & { _retried?: boolean };
 
@@ -12,27 +14,44 @@ const api = axios.create({
   timeout: 20_000,
 });
 
-/** Attach the Firebase JWT to every request automatically. */
+/** Path without the query string: search terms can name people. */
+function logPath(config: { url?: string }): string {
+  return config.url?.split('?')[0] ?? '?';
+}
+
+/** Attach an identity to every request: the Firebase JWT when signed in,
+ *  otherwise a locally stored dev token (dev mode only; the backend rejects
+ *  dev tokens everywhere else). */
 api.interceptors.request.use(async (config) => {
   const user = tryGetFirebaseAuth()?.currentUser;
   if (user) {
     const token = await user.getIdToken();
     config.headers.Authorization = `Bearer ${token}`;
+  } else {
+    const devToken = getDevToken();
+    if (devToken) config.headers.Authorization = `Bearer ${devToken}`;
   }
+  logger.debug('API →', config.method?.toUpperCase(), logPath(config));
   return config;
 });
 
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    logger.debug('API ←', response.status, logPath(response.config));
+    return response;
+  },
   async (error: AxiosError) => {
     const status = error.response?.status;
     const original = error.config as RetriableConfig | undefined;
     const user = tryGetFirebaseAuth()?.currentUser;
 
+    logger.warn('API error', status, original && logPath(original));
+
     // Expired token. Refresh once and retry, so a user who left a tab open
     // overnight does not get bounced to login on their first click.
     if (status === 401 && original && !original._retried && user) {
       original._retried = true;
+      logger.debug('Refreshing expired token and retrying once');
       await user.getIdToken(true);
       return api(original);
     }
@@ -40,6 +59,7 @@ api.interceptors.response.use(
     // Wrong portal for this account. Usually a stale claim after an admin
     // changed the role: refresh it and let RoleGate redirect on the new value.
     if (status === 403 && user) {
+      logger.debug('Refreshing claims after a 403');
       await user.getIdToken(true);
     }
 

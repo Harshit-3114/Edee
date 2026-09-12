@@ -11,6 +11,8 @@ export interface Course {
   seats: number | null;
   /** Paise. Always divide by 100 for display - see lib/format.ts. */
   application_fee: number;
+  /** ISO timestamp, or null when applications stay open indefinitely. */
+  closing_date: string | null;
   active: boolean;
 }
 
@@ -66,6 +68,8 @@ export interface ShortlistEntry {
   state: string;
   stream: Stream;
   application_fee: number;
+  /** ISO timestamp, or null when applications stay open indefinitely. */
+  closing_date: string | null;
   created_at: string;
 }
 
@@ -92,9 +96,31 @@ export interface Application {
 
 export interface OrderResponse {
   order_id: string;
+  /** Paise actually charged: gross minus scholarship. */
   amount: number;
+  /** Gross quoted fees in paise. */
+  total_amount: number;
+  /** Scholarship applied in paise. */
+  discount_amount: number;
   currency: string;
   key_id: string;
+}
+
+export interface OrderQuote {
+  item_count: number;
+  total_amount: number;
+  discount_amount: number;
+  amount: number;
+}
+
+export interface ScholarshipSlab {
+  min_forms: number;
+  discount_paise: number;
+}
+
+export interface ScholarshipPolicy {
+  slabs: ScholarshipSlab[];
+  per_form_beyond_paise: number;
 }
 
 export interface CollegeQuery {
@@ -156,6 +182,22 @@ export interface PaymentRow {
   amount: number;
   status: string;
   verified_at: string;
+}
+
+export type ServiceStatusValue = 'operational' | 'degraded' | 'down';
+
+export interface ServiceStatus {
+  name: string;
+  label: string;
+  status: ServiceStatusValue;
+  latency_ms: number | null;
+  detail: string;
+}
+
+export interface SystemStatus {
+  overall: ServiceStatusValue;
+  checked_at: string;
+  services: ServiceStatus[];
 }
 
 export interface AuditEvent {

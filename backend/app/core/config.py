@@ -1,6 +1,6 @@
 from pydantic_settings import BaseSettings
 from pydantic import field_validator
-from typing import List
+from typing import List, Optional
 
 
 class Settings(BaseSettings):
@@ -10,6 +10,13 @@ class Settings(BaseSettings):
     RAZORPAY_KEY_SECRET: str
     RAZORPAY_WEBHOOK_SECRET: str
     ENVIRONMENT: str = "development"
+    LOG_LEVEL: str = "INFO"
+    # Dev mode override. 1 forces dev mode on (dev: tokens accepted) even
+    # with Firebase keys; 0 forces it off even without them. Unset means
+    # auto-detect (dev mode when no service account is configured in
+    # development). Local development only: staging/production refuse to
+    # boot with it set to 1.
+    DEV_MODE: Optional[bool] = None
 
     # Comma-separated. Never "*": this API sends credentials, and a wildcard
     # origin with credentials is how a signed-in student's data gets read by
@@ -31,6 +38,14 @@ class Settings(BaseSettings):
         if value.lower() not in allowed:
             raise ValueError(f"ENVIRONMENT must be one of {sorted(allowed)}")
         return value
+
+    @field_validator("LOG_LEVEL")
+    @classmethod
+    def _known_log_level(cls, value: str) -> str:
+        allowed = {"DEBUG", "INFO", "WARNING", "ERROR"}
+        if value.upper() not in allowed:
+            raise ValueError(f"LOG_LEVEL must be one of {sorted(allowed)}")
+        return value.upper()
 
     class Config:
         env_file = ".env"

@@ -4,6 +4,7 @@ from sqlalchemy import text
 from app.db.connection import get_db
 from app.middleware.auth import require_roles
 from app.models.shortlist import ShortlistAdd
+from datetime import datetime, timezone
 import uuid
 import logging
 
@@ -44,6 +45,7 @@ async def get_shortlist(
                    cc.course_name,
                    cc.stream,
                    cc.application_fee * 100 AS application_fee,
+                   cc.closing_date,
                    s.created_at
             FROM shortlists s
             JOIN colleges c         ON c.id = s.college_id
@@ -78,11 +80,33 @@ async def add_to_shortlist(
               AND cc.college_id = :college_id
               AND cc.active = true
               AND c.active = true
+              AND (cc.closing_date IS NULL OR cc.closing_date > now())
             """
         ),
         {"course_id": body.course_id, "college_id": body.college_id},
     )
     if not pair.fetchone():
+        # Distinguish "no such pairing" from "applications closed" so the
+        # client can say which one it is. An inactive course is still a 404;
+        # only a passed closing date earns the explicit message.
+        exists = await db.execute(
+            text(
+                """
+                SELECT cc.closing_date
+                FROM college_courses cc
+                JOIN colleges c ON c.id = cc.college_id
+                WHERE cc.id = :course_id
+                  AND cc.college_id = :college_id
+                """
+            ),
+            {"course_id": body.course_id, "college_id": body.college_id},
+        )
+        row = exists.fetchone()
+        if row is not None and row[0] is not None:
+            if row[0].replace(tzinfo=timezone.utc) <= datetime.now(timezone.utc):
+                raise HTTPException(
+                    status_code=409, detail="Applications for this course have closed"
+                )
         raise HTTPException(
             status_code=404, detail="That course is not open at that college"
         )

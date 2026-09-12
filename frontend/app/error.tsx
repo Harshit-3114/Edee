@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import Button from '@/components/ui/Button';
+import { logger } from '@/lib/logger';
 
 export default function GlobalError({
   error,
@@ -11,7 +12,7 @@ export default function GlobalError({
   reset: () => void;
 }) {
   useEffect(() => {
-    console.error(error);
+    logger.error('Unhandled page error:', error);
   }, [error]);
 
   return (

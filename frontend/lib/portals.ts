@@ -71,3 +71,27 @@ export function isPublicPath(pathname: string): boolean {
 export function isRole(value: unknown): value is Role {
   return typeof value === 'string' && (ROLES as readonly string[]).includes(value);
 }
+
+export type PostLoginAction =
+  | { kind: 'signup' }
+  | { kind: 'go'; path: string }
+  | { kind: 'mismatch'; actual: Role };
+
+/**
+ * Decides where a freshly signed-in user goes.
+ *
+ * `portal` is the tab they picked on the sign-in page. When it disagrees with
+ * the role on their verified token, say so instead of silently landing them
+ * somewhere they did not ask for — that silent jump is what makes staff think
+ * sign-in is broken.
+ */
+export function resolvePostLoginDestination(
+  role: Role | null,
+  portal: Role | null,
+  next: string | null,
+): PostLoginAction {
+  if (!role) return { kind: 'signup' };
+  if (portal && portal !== role) return { kind: 'mismatch', actual: role };
+  if (next && roleForPath(next) === role) return { kind: 'go', path: next };
+  return { kind: 'go', path: PORTAL_HOME[role] };
+}

@@ -23,6 +23,7 @@ const landing: CollegeLanding = {
       duration_years: 3,
       seats: 60,
       application_fee: 150000,
+      closing_date: null,
       active: true,
     },
     {
@@ -33,6 +34,7 @@ const landing: CollegeLanding = {
       duration_years: 2,
       seats: 20,
       application_fee: 200000,
+      closing_date: null,
       active: false,
     },
   ],
@@ -43,8 +45,8 @@ describe('CollegeLandingPage', () => {
     const { container } = render(<CollegeLandingPage college={landing} />);
     expect(screen.getByRole('heading', { name: 'Fergusson College' })).toBeInTheDocument();
     expect(screen.getByText('A great place to study.')).toBeInTheDocument();
-    // Fee in rupees, not paise.
-    expect(screen.getByText(/1,500/)).toBeInTheDocument();
+    // Fee in rupees, not paise (stats strip and course table agree).
+    expect(screen.getAllByText(/1,500/).length).toBeGreaterThan(0);
     // Only open courses are listed.
     expect(screen.getByText('B.Sc Statistics')).toBeInTheDocument();
     expect(screen.queryByText('M.Sc Statistics')).not.toBeInTheDocument();

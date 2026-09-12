@@ -5,6 +5,7 @@ import {
   ROLES,
   isPublicPath,
   isRole,
+  resolvePostLoginDestination,
   roleForPath,
 } from '@/lib/portals';
 
@@ -48,5 +49,32 @@ describe('portal routing', () => {
     expect(isRole('superuser')).toBe(false);
     expect(isRole(undefined)).toBe(false);
     expect(isRole(null)).toBe(false);
+  });
+});
+
+describe('resolvePostLoginDestination', () => {
+  it('sends a request without a role to signup', () => {
+    expect(resolvePostLoginDestination(null, 'student', null)).toEqual({ kind: 'signup' });
+  });
+
+  it('honours a matching portal pick and a valid next path', () => {
+    expect(resolvePostLoginDestination('college', 'college', '/college/dashboard')).toEqual({
+      kind: 'go',
+      path: '/college/dashboard',
+    });
+  });
+
+  it('falls back to the portal home when next points elsewhere', () => {
+    expect(resolvePostLoginDestination('student', 'student', '/admin/users')).toEqual({
+      kind: 'go',
+      path: PORTAL_HOME.student,
+    });
+  });
+
+  it('flags a mismatch instead of silently landing elsewhere', () => {
+    expect(resolvePostLoginDestination('college', 'student', null)).toEqual({
+      kind: 'mismatch',
+      actual: 'college',
+    });
   });
 });
