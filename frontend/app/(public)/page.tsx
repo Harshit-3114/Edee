@@ -14,6 +14,7 @@ import Reveal from '@/components/ui/Reveal';
 import SiteFooter from './_components/SiteFooter';
 import SiteHeader from './_components/SiteHeader';
 import { FAQS } from './_components/faqs';
+import HeroGradient from '@/components/ui/HeroGradient';
 
 const STEPS = [
   {
@@ -70,67 +71,71 @@ export default function LandingPage() {
       <SiteHeader />
 
       <main id="main">
-        <section className="mx-auto grid max-w-6xl items-center gap-10 px-6 pt-16 pb-20 lg:grid-cols-[1.05fr_1fr] lg:pt-24">
-          <div className="rise">
-            <p className="text-[13px] font-medium tracking-wide text-[var(--accent-text)] uppercase">
-              UG and PG admissions, in one place
-            </p>
-            <h1 className="mt-3 max-w-[15ch] text-4xl leading-[1.08] font-semibold tracking-tight md:text-5xl lg:text-6xl">
-              Apply to every college on one list
-            </h1>
-            <p className="mt-5 max-w-[48ch] text-base leading-relaxed text-[var(--text-secondary)]">
-              Search UG and PG courses across India, shortlist what fits, and pay all your
-              application fees in a single transaction.
-            </p>
-            <div className="mt-8 flex flex-wrap items-center gap-3">
-              <LinkButton href="/login">
+        <div className="relative min-h-[80vh] flex items-center">
+          <HeroGradient />
+          <div className="vignette" aria-hidden="true" />
+          <section className="relative z-10 mx-auto grid max-w-6xl items-center gap-10 px-6 pt-16 pb-20 lg:grid-cols-[1.05fr_1fr] lg:pt-24 w-full hero-content">
+            <div className="rise">
+              <p className="text-[13px] font-medium tracking-wide text-[var(--accent-text)] uppercase">
+                UG and PG admissions, in one place
+              </p>
+              <h1 className="mt-3 max-w-[15ch] text-4xl leading-[1.08] font-semibold tracking-tight md:text-5xl lg:text-6xl">
+                Apply to every college on one list
+              </h1>
+              <p className="mt-5 max-w-[48ch] text-base leading-relaxed text-[var(--text-secondary)]">
+                Search UG and PG courses across India, shortlist what fits, and pay all your
+                application fees in a single transaction.
+              </p>
+<div className="mt-8 flex flex-wrap items-center gap-3">
+              <LinkButton href="/login" className="btn">
                 Get started
                 <ArrowRight size={15} weight="bold" />
               </LinkButton>
-              <LinkButton href="#how-it-works" variant="secondary">
+              <LinkButton href="#how-it-works" variant="secondary" className="btn">
                 See how it works
               </LinkButton>
             </div>
-          </div>
+            </div>
 
-          <div
-            aria-label="How Edee Apply works: search courses, shortlist what fits, pay once securely"
-            role="img"
-            className="rise rounded-lg border border-[var(--line)] bg-[var(--surface-sunken)] p-5 sm:p-6"
-            style={{ animationDelay: '120ms' }}
-          >
-            <div className="flex flex-col gap-3">
-              {FLOW.map(({ icon: Icon, title, body }, index) => (
-                <div key={title} className="relative flex gap-4">
-                  {index < FLOW.length - 1 && (
-                    <span
-                      aria-hidden="true"
-                      className="absolute top-11 bottom-[-14px] left-[17px] w-px bg-[var(--line-strong)]"
-                    />
-                  )}
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--surface-raised)] text-[var(--accent-text)] ring-1 ring-[var(--line-strong)]">
-                    <Icon size={18} aria-hidden="true" />
-                  </span>
-                  <span className="min-w-0 flex-1 rounded-lg border border-[var(--line)] bg-[var(--surface-raised)] p-4 shadow-[var(--shadow-sm)]">
-                    <span className="block text-sm font-medium">
-                      {index + 1}. {title}
+            <div
+              aria-label="How Edee Apply works: search courses, shortlist what fits, pay once securely"
+              role="img"
+              className="rise rounded-lg border border-[var(--line)] bg-[var(--surface-sunken)] p-5 sm:p-6"
+              style={{ animationDelay: '120ms' }}
+            >
+              <div className="flex flex-col gap-3">
+                {FLOW.map(({ icon: Icon, title, body }, index) => (
+                  <div key={title} className="relative flex gap-4">
+                    {index < FLOW.length - 1 && (
+                      <span
+                        aria-hidden="true"
+                        className="absolute top-11 bottom-[-14px] left-[17px] w-px bg-[var(--line-strong)]"
+                      />
+                    )}
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--surface-raised)] text-[var(--accent-text)] ring-1 ring-[var(--line-strong)]">
+                      <Icon size={18} aria-hidden="true" />
                     </span>
-                    <span className="mt-1 block text-[13px] leading-relaxed text-[var(--text-secondary)]">
-                      {body}
+                    <span className="min-w-0 flex-1 rounded-lg border border-[var(--line)] bg-[var(--surface-raised)] p-4 shadow-[var(--shadow-sm)] card">
+                      <span className="block text-sm font-medium">
+                        {index + 1}. {title}
+                      </span>
+                      <span className="mt-1 block text-[13px] leading-relaxed text-[var(--text-secondary)]">
+                        {body}
+                      </span>
                     </span>
+                  </div>
+                ))}
+                <div className="flex items-center justify-between gap-3 rounded-lg bg-[var(--accent)] p-4 text-[var(--text-inverse)] shadow-[var(--shadow-md)]">
+                  <span className="flex items-center gap-2 text-sm font-medium">
+                    <GraduationCap size={16} aria-hidden="true" />
+                    One list, one payment, every application tracked
                   </span>
+                  <ArrowRight size={15} weight="bold" aria-hidden="true" />
                 </div>
-              ))}
-              <div className="flex items-center justify-between gap-3 rounded-lg bg-[var(--accent)] p-4 text-[var(--text-inverse)] shadow-[var(--shadow-md)]">
-                <span className="flex items-center gap-2 text-sm font-medium">
-                  <GraduationCap size={16} aria-hidden="true" />
-                  One list, one payment, every application tracked
-                </span>
-                <ArrowRight size={15} weight="bold" aria-hidden="true" />
               </div>
             </div>
-          </div>
-        </section>
+          </section>
+        </div>
 
         <section
           id="how-it-works"
@@ -182,7 +187,7 @@ export default function LandingPage() {
                   same course.
                 </p>
                 <p className="mt-6">
-                  <LinkButton href="/login">
+                  <LinkButton href="/login" className="btn">
                     Start your shortlist
                     <ArrowRight size={15} weight="bold" />
                   </LinkButton>
@@ -193,7 +198,7 @@ export default function LandingPage() {
             <div className="flex flex-col gap-4">
               {AUDIENCES.map(({ icon: Icon, title, body }, index) => (
                 <Reveal key={title} delay={index * 90}>
-                  <div className="rounded-lg border border-[var(--line)] bg-[var(--surface-raised)] p-5">
+                  <div className="rounded-lg border border-[var(--line)] bg-[var(--surface-raised)] p-5 card">
                     <h3 className="flex items-center gap-2 text-base font-medium">
                       <Icon size={18} className="text-[var(--accent-text)]" aria-hidden="true" />
                       {title}
@@ -261,7 +266,7 @@ export default function LandingPage() {
               <div className="flex flex-wrap gap-3 lg:justify-end">
                 <LinkButton
                   href="/login"
-                  className="border-transparent bg-[var(--surface-raised)] text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
+                  className="border-transparent bg-[var(--surface-raised)] text-[var(--text-primary)] hover:bg-[var(--surface-hover)] btn"
                 >
                   Get started
                   <ArrowRight size={15} weight="bold" />

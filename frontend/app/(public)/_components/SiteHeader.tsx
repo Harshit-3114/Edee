@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import Image from 'next/image';
 import LinkButton from '@/components/ui/LinkButton';
 
 const LINKS = [
@@ -11,26 +12,34 @@ const LINKS = [
 /** Shared header for every public page: same links, same order, everywhere. */
 export default function SiteHeader() {
   return (
-    <header className="border-b border-[var(--line)]">
+    <header className="border-b border-[var(--line)] bg-[var(--surface)]/80 backdrop-blur-sm sticky top-0 z-40 transition-shadow duration-300 hover:shadow-md">
       <nav
         aria-label="Main"
         className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-6"
       >
-        <Link href="/" className="shrink-0 text-sm font-semibold tracking-tight">
-          Edee Apply
+        <Link href="/" className="shrink-0 flex items-center gap-2" aria-label="Edee Apply home">
+          <Image
+            src="/logo.png"
+            alt=""
+            width={32}
+            height={32}
+            className="transition-transform duration-300 hover:scale-110"
+            priority
+          />
+          <span className="text-sm font-semibold tracking-tight text-[var(--text-primary)]">Edee Apply</span>
         </Link>
         <div className="hidden items-center gap-6 md:flex">
           {LINKS.map((link) => (
             <Link
               key={link.href}
               href={link.href}
-              className="text-sm text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
+              className="text-sm text-[var(--text-secondary)] transition-colors duration-200 hover:text-[var(--text-primary)] hover:scale-105"
             >
               {link.label}
             </Link>
           ))}
         </div>
-        <LinkButton href="/login" size="sm">
+        <LinkButton href="/login" size="sm" className="btn">
           Sign in
         </LinkButton>
       </nav>
@@ -40,7 +49,7 @@ export default function SiteHeader() {
             <Link
               key={link.href}
               href={link.href}
-              className="shrink-0 text-sm text-[var(--text-secondary)]"
+              className="shrink-0 text-sm text-[var(--text-secondary)] transition-colors duration-200 hover:text-[var(--text-primary)]"
             >
               {link.label}
             </Link>

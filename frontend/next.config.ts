@@ -3,6 +3,9 @@ import path from 'node:path';
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  compress: true,
+  poweredByHeader: false,
+  productionBrowserSourceMaps: false,
 
   // Standalone output keeps the production Docker image small.
   output: 'standalone',
@@ -11,8 +14,12 @@ const nextConfig: NextConfig = {
   // pin tracing to the frontend directory as the warning itself suggests.
   outputFileTracingRoot: path.join(__dirname),
 
-  // No remote images: college artwork arrives as college-supplied URLs and
-  // renders on plain <img>, never through the optimizer.
+  // Optimize images – allow local images and modern formats.
+  images: {
+    formats: ['image/avif', 'image/webp'],
+    // If you ever need remote college images, add their hostnames here:
+    // remotePatterns: [{ protocol: 'https', hostname: 'example.com' }],
+  },
 
   // All API calls go to FastAPI, never to Next.js route handlers.
   async rewrites() {

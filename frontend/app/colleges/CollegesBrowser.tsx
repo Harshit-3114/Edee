@@ -1,20 +1,11 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import Link from 'next/link';
-import { ArrowRight } from '@phosphor-icons/react/dist/ssr';
-import Badge from '@/components/ui/Badge';
 import { Input, Select } from '@/components/ui/Input';
 import { EmptyState, ErrorState, LoadingList } from '@/components/ui/States';
 import api, { apiErrorMessage } from '@/lib/api';
-import { formatFee } from '@/lib/format';
 import type { College, Stream } from '@/lib/types';
-
-const TYPE_LABEL: Record<College['type'], string> = {
-  government: 'Government',
-  private: 'Private',
-  deemed: 'Deemed',
-};
+import CollegeCard from '@/components/ui/CollegeCard';
 
 /**
  * Public college discovery. No login needed: it reads the public college
@@ -103,49 +94,10 @@ export default function CollegesBrowser() {
         )}
 
         {!loading && !error && colleges.length > 0 && (
-          <ul className="flex flex-col gap-4">
-            {colleges.map((college) => {
-              const open = college.courses.filter((course) => course.active);
-              const fees = open.map((course) => course.application_fee);
-              const from = fees.length > 0 ? Math.min(...fees) : null;
-              const href = college.slug ? `/colleges/${college.slug}` : '/student/colleges';
-              return (
-                <li
-                  key={college.id}
-                  className="rounded-lg border border-[var(--line)] bg-[var(--surface-raised)] p-5 transition-shadow duration-200 hover:shadow-[var(--shadow-md)]"
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <h2 className="text-base font-semibold tracking-tight">
-                        <Link
-                          href={href}
-                          className="underline decoration-[var(--line-strong)] underline-offset-4 transition-colors hover:decoration-[var(--text-primary)]"
-                        >
-                          {college.name}
-                        </Link>
-                      </h2>
-                      <p className="mt-1 text-[13px] text-[var(--text-secondary)]">
-                        {college.city}, {college.state}
-                      </p>
-                    </div>
-                    <Badge>{TYPE_LABEL[college.type]}</Badge>
-                  </div>
-                  <p className="tabular mt-3 text-[13px] text-[var(--text-secondary)]">
-                    {open.length} {open.length === 1 ? 'course' : 'courses'}
-                    {from !== null && ` · fees from ${formatFee(from)}`}
-                  </p>
-                  <p className="mt-3">
-                    <Link
-                      href={href}
-                      className="inline-flex items-center gap-1.5 text-sm font-medium text-[var(--accent-text)] underline underline-offset-4"
-                    >
-                      View college
-                      <ArrowRight size={14} weight="bold" />
-                    </Link>
-                  </p>
-                </li>
-              );
-            })}
+          <ul className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {colleges.map((college, idx) => (
+              <CollegeCard key={college.id} college={college} index={idx} />
+            ))}
           </ul>
         )}
       </div>
