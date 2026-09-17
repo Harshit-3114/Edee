@@ -17,7 +17,7 @@ export default function SiteHeader() {
         aria-label="Main"
         className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-6"
       >
-        <Link href="/" className="shrink-0 flex items-center gap-2" aria-label="Edee Apply home">
+        <Link href="/" className="shrink-0 flex items-center gap-2" aria-label="Edee Apply">
           <Image
             src="/logo.png"
             alt=""

@@ -15,7 +15,6 @@ from app.main import app, lifespan
 from app.core import devmode
 from app.core.config import settings
 from app.db.connection import get_db
-from app.middleware.auth import get_current_user
 from app.services.firebase import assign_role
 
 

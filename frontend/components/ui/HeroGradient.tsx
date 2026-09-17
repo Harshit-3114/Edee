@@ -7,6 +7,7 @@ export default function HeroGradient() {
   const [isDark, setIsDark] = useState(false);
 
   useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return;
     const media = window.matchMedia('(prefers-color-scheme: dark)');
     const update = () => setIsDark(media.matches || document.documentElement.classList.contains('dark'));
     update();
