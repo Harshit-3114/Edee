@@ -14,7 +14,9 @@ describe('stitch portal design language', () => {
   });
 
   it('summarises student applications by status above the list', () => {
-    const page = src('app/student/dashboard/page.tsx');
+    // page.tsx is now the server component that fetches; the markup lives in
+    // the client half it renders.
+    const page = src('app/student/dashboard/StudentDashboardClient.tsx');
     expect(page).toContain('StatRow');
     expect(page).toContain('counts.');
   });

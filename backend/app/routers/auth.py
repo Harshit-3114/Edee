@@ -40,6 +40,35 @@ class SessionOut(BaseModel):
     expires_in: int
 
 
+class MeOut(BaseModel):
+    uid: str
+    role: str | None = None
+    college_id: str | None = None
+    coaching_centre_id: str | None = None
+
+
+@router.get("/me", response_model=MeOut)
+async def whoami(user: dict = Depends(get_current_user)):
+    """
+    The verified identity behind the current credential.
+
+    This is what lets the Next.js server open the role gate before any
+    JavaScript runs. Without it the server can hold a session cookie and still
+    not know whose it is, so every portal page has to render "Checking your
+    access" and decide after hydration - which is most of the delay the session
+    cookie was meant to remove.
+
+    Claims only. Nothing here touches the database, so it stays cheap enough to
+    call on every portal render.
+    """
+    return MeOut(
+        uid=str(user.get("uid") or ""),
+        role=user.get("role"),
+        college_id=user.get("college_id"),
+        coaching_centre_id=user.get("coaching_centre_id"),
+    )
+
+
 @router.post("/session", response_model=SessionOut)
 async def create_session(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer),

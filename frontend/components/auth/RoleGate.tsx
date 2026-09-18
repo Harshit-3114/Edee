@@ -15,9 +15,18 @@ import { Skeleton } from '@/components/ui/States';
  */
 export default function RoleGate({
   role,
+  serverRole,
   children,
 }: {
   role: Role;
+  /**
+   * The role the server already verified for this request, from the session
+   * cookie. When it matches, the gate is open on the first paint - no
+   * "Checking your access" while Firebase boots in the browser. The client
+   * check below still runs and still redirects if it disagrees, so this
+   * shortens the wait without becoming the thing that decides access.
+   */
+  serverRole?: Role | null;
   children: React.ReactNode;
 }) {
   const { role: actual, loading } = useRole();
@@ -29,7 +38,10 @@ export default function RoleGate({
     else if (actual !== role) router.replace(PORTAL_HOME[actual]);
   }, [actual, loading, role, router]);
 
-  if (loading || actual !== role) {
+  // Still resolving on the client, but the server vouched for this role.
+  const serverVouched = loading && serverRole === role;
+
+  if (!serverVouched && (loading || actual !== role)) {
     return (
       <div className="min-h-[100dvh] p-6" role="status" aria-live="polite">
         <span className="sr-only">Checking your access</span>

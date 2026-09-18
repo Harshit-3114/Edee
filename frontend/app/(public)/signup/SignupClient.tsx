@@ -14,6 +14,7 @@ import api, { apiErrorMessage } from '@/lib/api';
 import { isValidIndianMobile } from '@/lib/format';
 import { PORTAL_HOME } from '@/lib/portals';
 import { syncSessionCookie } from '@/lib/session';
+import { startServerSession } from '@/lib/clientSession';
 import type { Stream } from '@/lib/types';
 
 /**
@@ -87,6 +88,9 @@ export default function SignupClient() {
       // The backend just granted the student claim. Refresh so middleware and
       // RoleGate can both see it, then go to the portal.
       await syncSessionCookie(user);
+      // The backend granted the student claim a moment ago, so the session
+      // minted here carries it.
+      await startServerSession();
       router.replace('/student/dashboard');
     } catch (err) {
       setFormError(apiErrorMessage(err, 'Could not create your profile.'));

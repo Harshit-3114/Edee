@@ -43,7 +43,7 @@ const nextConfig: NextConfig = {
       })),
       {
         // Portals, plus the screens that carry an account into existence.
-        source: '/:path(student|college|coaching|admin|login|signup):rest(/.*)?',
+        source: '/:path(student|college|coaching|admin|login|signup|auth):rest(/.*)?',
         headers: [
           { key: 'Cache-Control', value: 'private, no-store' },
           { key: 'Vary', value: 'Cookie' },

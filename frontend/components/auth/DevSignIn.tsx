@@ -13,6 +13,7 @@ import {
   isDevModeForced,
   setDevToken,
 } from '@/lib/devSession';
+import { startServerSession } from '@/lib/clientSession';
 import { isFirebaseConfigured, tryGetFirebaseAuth } from '@/lib/firebase';
 import { PORTAL_HOME, PORTAL_LABEL, isRole, type Role } from '@/lib/portals';
 
@@ -150,6 +151,9 @@ export default function DevSignIn() {
         setError('Could not build a dev token.');
         return;
       }
+      // Dev sessions get a server session too, so server-rendered pages work
+      // exactly as they do with Firebase rather than only in production.
+      await startServerSession();
       router.replace(PORTAL_HOME[claims.role]);
     } finally {
       setBusy(false);

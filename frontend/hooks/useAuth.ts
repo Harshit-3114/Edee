@@ -5,6 +5,7 @@ import { onAuthStateChanged, signOut as fbSignOut, type User } from 'firebase/au
 import { tryGetFirebaseAuth } from '@/lib/firebase';
 import { clearDevToken } from '@/lib/devSession';
 import { clearSessionCookie } from '@/lib/session';
+import { endServerSession } from '@/lib/clientSession';
 
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
@@ -25,6 +26,9 @@ export function useAuth() {
   }, []);
 
   async function signOut() {
+    // Before dropping the local credential, while it can still authenticate
+    // the revoke call upstream.
+    await endServerSession();
     const auth = tryGetFirebaseAuth();
     if (auth) await fbSignOut(auth);
     clearDevToken();

@@ -13,13 +13,15 @@ import type { Role } from '@/lib/portals';
  */
 export default function PortalFrame({
   role,
+  serverRole,
   children,
 }: {
   role: Role;
+  serverRole?: Role | null;
   children: React.ReactNode;
 }) {
   return (
-    <RoleGate role={role}>
+    <RoleGate role={role} serverRole={serverRole}>
       <PortalShell role={role}>{children}</PortalShell>
     </RoleGate>
   );

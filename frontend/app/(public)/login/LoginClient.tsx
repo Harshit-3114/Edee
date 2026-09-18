@@ -21,6 +21,7 @@ import { ErrorState, Skeleton } from '@/components/ui/States';
 import { useAuth } from '@/hooks/useAuth';
 import { useRole } from '@/hooks/useRole';
 import { isDevModeForced } from '@/lib/devSession';
+import { startServerSession } from '@/lib/clientSession';
 import {
   PORTAL_HOME,
   PORTAL_LABEL,
@@ -76,6 +77,9 @@ function LoginForm() {
   async function route(signedIn: User) {
     setRouting(true);
     const role = await syncSessionCookie(signedIn);
+    // Hand the server a credential of its own, so the portal page they are
+    // about to land on can render with its data already in it.
+    await startServerSession();
     const action = resolvePostLoginDestination(role, portal, next);
 
     if (action.kind === 'signup') {

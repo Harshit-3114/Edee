@@ -1,4 +1,5 @@
 import PortalFrame from '@/components/auth/PortalFrame';
+import { serverRole } from '@/lib/serverRole';
 
 /**
  * Every page in this portal is gated on a Firebase token that only exists in
@@ -7,6 +8,13 @@ import PortalFrame from '@/components/auth/PortalFrame';
  */
 export const dynamic = 'force-dynamic';
 
-export default function StudentLayout({ children }: { children: React.ReactNode }) {
-  return <PortalFrame role="student">{children}</PortalFrame>;
+export default async function StudentLayout({ children }: { children: React.ReactNode }) {
+  // Verified on the server from the session cookie, so the shell and its
+  // content can render before any JavaScript runs.
+  const verified = await serverRole();
+  return (
+    <PortalFrame role="student" serverRole={verified}>
+      {children}
+    </PortalFrame>
+  );
 }
