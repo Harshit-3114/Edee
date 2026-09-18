@@ -26,9 +26,9 @@ describe('LandingPage', () => {
     expect(
       within(main).getByRole('link', { name: /see how it works/i }),
     ).toHaveAttribute('href', '#how-it-works');
-    expect(
-      within(main).getAllByRole('link', { name: /get started/i })[0],
-    ).toHaveAttribute('href', '/login');
+    // The "Get started" button is now a LinkButton with className="btn" linking to /login
+    const getStartedLinks = within(main).getAllByRole('link', { name: /get started/i });
+    expect(getStartedLinks[0]).toHaveAttribute('href', '/login');
   });
 
   it('answers real objections with real product behaviour', () => {

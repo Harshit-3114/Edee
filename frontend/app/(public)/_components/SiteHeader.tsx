@@ -14,7 +14,7 @@ const LINKS = [
 
 /** Shared header for every public page: same links, same order, everywhere. */
 export default function SiteHeader() {
-  const pathname = usePathname();
+  const pathname = usePathname() || '/';
 
   function desktopClass(href: string) {
     const active = pathname === href || pathname.startsWith(`${href}/`);

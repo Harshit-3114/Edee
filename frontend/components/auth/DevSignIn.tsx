@@ -67,6 +67,8 @@ export default function DevSignIn() {
   const picked = params.get('portal');
   const role: Role = isRole(picked) ? picked : 'student';
 
+  const devBypass = useDevBypass();
+
   const needsOrg = role === 'college' || role === 'coaching';
   const orgOptions =
     role === 'college'
@@ -74,6 +76,7 @@ export default function DevSignIn() {
       : (directory?.coaching_centres ?? []).map((c) => ({ id: c.id, name: c.name }));
 
   useEffect(() => {
+    if (!devBypass) return;
     let cancelled = false;
     (async () => {
       // Organisation picker for staff roles. Fails silently on purpose: a
@@ -88,7 +91,11 @@ export default function DevSignIn() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [devBypass]);
+
+  if (devBypass !== true) {
+    return null;
+  }
 
   async function resolveOrg(input: string): Promise<string | null> {
     const value = input.trim();

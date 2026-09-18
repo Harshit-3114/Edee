@@ -7,9 +7,11 @@ const replace = vi.fn();
 const apiGet = vi.fn();
 const fetchMock = vi.fn();
 
+let mockSearchParams = new URLSearchParams('');
+
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ replace, push: vi.fn() }),
-  useSearchParams: () => new URLSearchParams(''),
+  useSearchParams: () => mockSearchParams,
 }));
 
 vi.mock('@/lib/api', () => ({
@@ -37,6 +39,7 @@ function stubHealth(devMode: boolean) {
 
 describe('DevSignIn', () => {
   beforeEach(() => {
+    mockSearchParams = new URLSearchParams('');
     apiGet.mockReset().mockImplementation((url: unknown) => {
       if (url === '/dev/directory') return Promise.resolve({ data: directory });
       return Promise.reject(new Error(`unexpected ${String(url)}`));
@@ -65,15 +68,19 @@ describe('DevSignIn', () => {
   });
 
   it('signs in as a college from the directory', async () => {
+    mockSearchParams = new URLSearchParams('portal=college');
     render(<DevSignIn />);
-    await screen.findByRole('heading', { name: /developer quick sign-in/i });
+    await screen.findByRole('combobox', { name: /college/i });
 
-    await userEvent.click(screen.getByRole('button', { name: /^college$/i }));
-    await userEvent.selectOptions(
-      screen.getByLabelText(/college/i),
-      '11111111-1111-1111-1111-111111111111',
-    );
-    await userEvent.click(screen.getByRole('button', { name: /sign in as college/i }));
+    await act(async () => {
+      await userEvent.selectOptions(
+        screen.getByRole('combobox', { name: /college/i }),
+        '11111111-1111-1111-1111-111111111111',
+      );
+    });
+    await act(async () => {
+      await userEvent.click(screen.getByRole('button', { name: /sign in as college/i }));
+    });
 
     expect(window.localStorage.getItem('edee_dev_token')).toBe(
       'dev:college:11111111-1111-1111-1111-111111111111',
@@ -82,11 +89,16 @@ describe('DevSignIn', () => {
   });
 
   it('signs in as a labelled student with no organisation needed', async () => {
+    mockSearchParams = new URLSearchParams('portal=student');
     render(<DevSignIn />);
-    await screen.findByRole('heading', { name: /developer quick sign-in/i });
+    await screen.findByRole('textbox', { name: /label/i });
 
-    await userEvent.type(screen.getByLabelText(/label/i), 'alice');
-    await userEvent.click(screen.getByRole('button', { name: /sign in as student/i }));
+    await act(async () => {
+      await userEvent.type(screen.getByLabelText(/label/i), 'alice');
+    });
+    await act(async () => {
+      await userEvent.click(screen.getByRole('button', { name: /sign in as student/i }));
+    });
 
     expect(window.localStorage.getItem('edee_dev_token')).toBe('dev:student:alice');
     expect(replace).toHaveBeenCalledWith('/student/dashboard');

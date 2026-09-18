@@ -17,7 +17,6 @@ describe('radii + gradient sweep', () => {
       expect(`${f}: ${src}`).not.toContain('rounded-2xl');
       // Allow bg-gradient-to- and radial-gradient ONLY in hero sections with photos (intentional overlays)
       // Check that non-hero sections don't have decorative gradients
-      const nonHeroSections = src.split('<section').slice(1).join('<section');
       // Only flag gradients that aren't in hero/photo overlay contexts
       expect(`${f}: ${src}`).not.toContain('bg-gradient-to-r');
       expect(`${f}: ${src}`).not.toContain('bg-gradient-to-l');
