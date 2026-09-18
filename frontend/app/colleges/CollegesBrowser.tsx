@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Input, Select } from '@/components/ui/Input';
 import { EmptyState, ErrorState, LoadingList } from '@/components/ui/States';
 import api, { apiErrorMessage } from '@/lib/api';
@@ -12,11 +12,21 @@ import CollegeCard from '@/components/ui/CollegeCard';
  * list, the same endpoint the landing pages are built on. Logged-in visitors
  * get the identical catalogue inside the student portal, plus shortlisting.
  */
-export default function CollegesBrowser() {
-  const [colleges, setColleges] = useState<College[]>([]);
+export default function CollegesBrowser({
+  initialColleges,
+}: {
+  /**
+   * The unfiltered catalogue, rendered on the server. Public data, identical
+   * for every visitor, so it is safe to sit inside the cached HTML of this
+   * page - and it means the catalogue is cached with the page rather than
+   * fetched again by every browser that opens it.
+   */
+  initialColleges: College[] | null;
+}) {
+  const [colleges, setColleges] = useState<College[]>(initialColleges ?? []);
   const [search, setSearch] = useState('');
   const [stream, setStream] = useState<'' | Stream>('');
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(initialColleges === null);
   const [error, setError] = useState('');
 
   const load = useCallback(async () => {
@@ -38,7 +48,14 @@ export default function CollegesBrowser() {
     }
   }, [search, stream]);
 
+  // Skips exactly one run: the unfiltered catalogue the server already
+  // rendered. Cleared immediately, so searching and filtering still work.
+  const served = useRef(initialColleges !== null);
   useEffect(() => {
+    if (served.current) {
+      served.current = false;
+      return;
+    }
     const timer = setTimeout(() => void load(), search ? 350 : 0);
     return () => clearTimeout(timer);
   }, [load, search]);

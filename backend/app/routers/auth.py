@@ -19,7 +19,6 @@ refresh tokens are revoked.
 import logging
 from datetime import timedelta
 
-import firebase_admin
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from firebase_admin import auth as firebase_auth

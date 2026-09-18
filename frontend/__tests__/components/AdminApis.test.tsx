@@ -9,7 +9,7 @@ vi.mock('@/lib/api', () => ({
   apiErrorMessage: (_error: unknown, fallback: string) => fallback,
 }));
 
-const { default: AdminApisPage } = await import('@/app/admin/apis/page');
+const { default: AdminApisClient } = await import('@/app/admin/apis/AdminApisClient');
 
 const mixed = {
   overall: 'down',
@@ -39,7 +39,7 @@ describe('AdminApisPage', () => {
   });
 
   it('shows every integration with its own verdict', async () => {
-    render(<AdminApisPage />);
+    render(<AdminApisClient initialStatus={null} />);
     expect(await screen.findByText('PostgreSQL')).toBeInTheDocument();
     expect(screen.getByText('SELECT 1 ok')).toBeInTheDocument();
     expect(screen.getByText('Responded in 3 ms')).toBeInTheDocument();
@@ -49,7 +49,7 @@ describe('AdminApisPage', () => {
   });
 
   it('refresh reruns the checks without flashing a skeleton', async () => {
-    render(<AdminApisPage />);
+    render(<AdminApisClient initialStatus={null} />);
     await screen.findByText('PostgreSQL');
     get.mockClear();
     await userEvent.click(screen.getByRole('button', { name: /refresh/i }));

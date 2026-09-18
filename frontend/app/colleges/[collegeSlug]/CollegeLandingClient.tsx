@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import CollegeLandingPage from '@/components/college/CollegeLandingPage';
 import LinkButton from '@/components/ui/LinkButton';
 import { CardSkeleton, EmptyState, ErrorState } from '@/components/ui/States';
@@ -12,9 +12,20 @@ import type { CollegeLanding } from '@/lib/types';
  * Fetches the public landing payload. No login is needed: the endpoint is
  * public, and the api client only attaches a token when someone is signed in.
  */
-export default function CollegeLandingClient({ slug }: { slug: string }) {
-  const [college, setCollege] = useState<CollegeLanding | null>(null);
-  const [loading, setLoading] = useState(true);
+export default function CollegeLandingClient({
+  slug,
+  initialCollege,
+}: {
+  slug: string;
+  /**
+   * The listing rendered on the server. Public data, identical for every
+   * visitor, so it belongs in this page's cached HTML - which is also what
+   * lets search engines see the college rather than a skeleton.
+   */
+  initialCollege?: CollegeLanding | null;
+}) {
+  const [college, setCollege] = useState<CollegeLanding | null>(initialCollege ?? null);
+  const [loading, setLoading] = useState(!initialCollege);
   const [error, setError] = useState('');
   const [missing, setMissing] = useState(false);
 
@@ -36,7 +47,10 @@ export default function CollegeLandingClient({ slug }: { slug: string }) {
     }
   }, [slug]);
 
+  // Only when the server could not supply it.
+  const served = useRef(Boolean(initialCollege));
   useEffect(() => {
+    if (served.current) return;
     void load();
   }, [load]);
 

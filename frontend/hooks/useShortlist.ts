@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import api, { apiErrorMessage } from '@/lib/api';
 import { cachedGet, invalidateApiCache } from '@/lib/apiCache';
 import { sumFees } from '@/lib/format';
@@ -27,9 +27,14 @@ interface UseShortlist {
  * re-fetched after every mutation - the fee total drives a payment, so it is
  * worth one extra request to be sure the client and server agree.
  */
-export function useShortlist(): UseShortlist {
-  const [entries, setEntries] = useState<ShortlistEntry[]>([]);
-  const [loading, setLoading] = useState(true);
+/**
+ * `initialEntries` is the list a server component already fetched with the
+ * session cookie. Pass it and the hook starts loaded, with no request on
+ * mount; omit it and it behaves exactly as it always did.
+ */
+export function useShortlist(initialEntries?: ShortlistEntry[] | null): UseShortlist {
+  const [entries, setEntries] = useState<ShortlistEntry[]>(initialEntries ?? []);
+  const [loading, setLoading] = useState(!initialEntries);
   const [error, setError] = useState('');
   const [pending, setPending] = useState<Set<string>>(new Set());
 
@@ -50,7 +55,11 @@ export function useShortlist(): UseShortlist {
     }
   }, []);
 
+  // Only when the server could not supply it. Every later reload - after an
+  // add or a remove - goes through untouched.
+  const served = useRef(Boolean(initialEntries));
   useEffect(() => {
+    if (served.current) return;
     void reload();
   }, [reload]);
 

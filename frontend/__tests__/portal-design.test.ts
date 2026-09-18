@@ -22,13 +22,13 @@ describe('stitch portal design language', () => {
   });
 
   it('filters the college inbox with status tabs, not a dropdown', () => {
-    const page = src('app/college/applications/page.tsx');
+    const page = src('app/college/applications/CollegeApplicationsClient.tsx');
     expect(page).toContain('role="tablist"');
     expect(page).not.toContain('filter-status');
   });
 
   it('links the coaching overview to invite codes', () => {
-    const page = src('app/coaching/dashboard/page.tsx');
+    const page = src('app/coaching/dashboard/CoachingDashboardClient.tsx');
     expect(page).toContain('/coaching/invite');
   });
 });

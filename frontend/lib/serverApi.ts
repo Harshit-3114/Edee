@@ -65,3 +65,27 @@ export async function serverGet<T>(path: string): Promise<T | null> {
     return null;
   }
 }
+
+/**
+ * GET a PUBLIC endpoint from the server, with no credential at all.
+ *
+ * Separate from serverGet so the distinction is visible at the call site: this
+ * one is for pages a logged-out visitor can see, and its result is the same
+ * for everybody. That is what makes it safe to render into HTML the CDN holds
+ * - which serverGet's output never is.
+ *
+ * Same fail-soft contract: null on any failure, and the client half loads it.
+ */
+export async function publicGet<T>(path: string, revalidateSeconds = 300): Promise<T | null> {
+  try {
+    const res = await fetch(`${API}${path}`, {
+      // Shared, not per-user: let the server reuse it briefly rather than
+      // hitting the API once per visitor.
+      next: { revalidate: revalidateSeconds },
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as T;
+  } catch {
+    return null;
+  }
+}

@@ -73,11 +73,17 @@ services still reach it as `db:5432`; local development uses `localhost:5433`.
 The frontend never decides what a user may do; it decides what to *show*. Three
 layers stand between a request and the data, and only the last one is security:
 
-1. `frontend/middleware.ts` reads a `portal_role` cookie at the edge and
-   redirects before the wrong bundle is fetched. The cookie is client-written
-   and forgeable — a routing hint, not proof.
-2. `RoleGate` re-checks the role against the verified Firebase token.
-3. **The API** verifies the JWT and the row-level scope on every request.
+1. `frontend/proxy.ts` (Next.js 16's name for middleware) reads a
+   `portal_role` cookie at the edge and redirects before the wrong bundle is
+   fetched. The cookie is client-written and forgeable — a routing hint, not
+   proof. It also turns a signed-in visitor away from `/login` and `/signup`.
+2. The portal layout asks the API who the session cookie belongs to and passes
+   the answer to `RoleGate`, which opens on the first paint when it matches.
+   This only ever *shortens* the wait; it never widens access.
+3. `RoleGate` re-checks the role against the verified Firebase token in the
+   browser and redirects if it disagrees with either of the above.
+4. **The API** verifies the credential and the row-level scope on every
+   request.
 
 A forged cookie therefore gets a rendered shell and a wall of 403s.
 
@@ -88,6 +94,70 @@ querying another's applicants.
 **Money is paise on the wire.** `college_courses.application_fee` is stored in
 rupees; every endpoint converts at the edge so the API, the checkout, and
 Razorpay all speak one unit.
+
+## Session cookies and server rendering
+
+A Firebase ID token lives in browser IndexedDB, so a React Server Component —
+which runs before any JavaScript does — cannot read it. Every portal page used
+to render empty and fetch its own data after hydration, which is why they all
+showed skeletons.
+
+Signing in now also trades that ID token for a **session cookie**:
+
+```
+browser ──idToken──▶ /auth/session (Next route handler, same origin)
+                         └──Bearer idToken──▶ POST /auth/session (FastAPI)
+                                                  └─ verifies, mints a Firebase
+                                                     session cookie
+browser ◀── Set-Cookie: edee_session (httpOnly, SameSite=Lax, Secure)
+```
+
+Three properties are load-bearing:
+
+- **The cookie is set on the Next.js origin, never the API's.** The browser
+  therefore never attaches it to a FastAPI request by itself. Only this app's
+  server can present it, in an explicit `X-Session-Cookie` header — which is
+  what makes the server-rendering path free of cross-site request forgery by
+  construction rather than by a token check we would have to keep correct.
+- **It is a session cookie, not a parked ID token.** An ID token lasts an hour
+  and cannot be revoked, so stashing one in a cookie hands an attacker a full
+  hour on a stolen session. `verify_session_cookie(check_revoked=True)` rejects
+  a session the moment the account's refresh tokens are revoked.
+- **It is httpOnly.** No script — ours or an injected one — can read it.
+
+`lib/serverApi.ts` is the only thing that reads it. `serverGet` fetches as the
+current user with `cache: 'no-store'`; `publicGet` sends no credential at all
+and is deliberately a separate function, so the difference is visible at the
+call site. Both return `null` on any failure and never throw: server rendering
+is an optimisation over a client fetch that already works, and the client half
+loads the data itself if the server could not. A lapsed session degrades to the
+old behaviour instead of an error page.
+
+`Authorization: Bearer <id token>` still works everywhere and is what the
+browser's own `api` client uses. The two credentials are verified by two
+different Firebase calls and are not interchangeable.
+
+## Caching
+
+Cache policy is split by audience, in `frontend/next.config.ts`:
+
+| Routes | `Cache-Control` |
+|---|---|
+| `/`, `/about`, `/why-us`, `/contact`, `/colleges`, `/colleges/:slug` | `public, max-age=0, s-maxage=3600, stale-while-revalidate=86400` |
+| `/student/*`, `/college/*`, `/coaching/*`, `/admin/*`, `/login`, `/signup`, `/auth/*` | `private, no-store` + `Vary: Cookie` |
+
+Public pages render identically for every viewer — the account menu resolves in
+the browser — so nothing personal can sit in a shared cache. Anything behind a
+portal is one person's data and is never stored by a CDN, a proxy, or the back
+button.
+
+Public pages also opt out of link prefetching, so a visitor downloads a page
+when they ask for it rather than every page they might visit.
+
+Note that `/colleges` renders per request rather than at build time. It fetches
+the catalogue on the server, and prerendering would run that fetch during
+`next build` — in CI and the Docker image build, where the API is unreachable —
+freezing an empty catalogue into the page.
 
 ## Development without Firebase (dev mode)
 
@@ -119,10 +189,11 @@ integration, including two issues that were giving away free applications.
 | **API** | FastAPI 0.115 (async) |
 | **DB** | PostgreSQL 16 (asyncpg) |
 | **Migrations** | Alembic (5 migrations: 001–005) |
+| **Rendering** | Next.js 16 App Router — portal pages server-rendered via session cookie |
 | **Auth** | Firebase Admin SDK (JWT verification) |
 | **Payments** | Razorpay (order creation + webhook) |
 | **Containerisation** | Docker + docker‑compose |
-| **Testing** | pytest / httpx (backend, 196 tests) · Vitest (frontend, 107 tests) |
+| **Testing** | pytest / httpx (backend, 220 tests) · Vitest (frontend, 171 tests) |
 | **Code quality** | black, ruff, ESLint, `tsc --noEmit` |
 
 ---
@@ -176,17 +247,23 @@ edee/
 │  │  ├─ db/            # async engine/session factory, ORM Base
 │  │  ├─ middleware/    # Firebase JWT auth + role/scope helpers
 │  │  ├─ models/        # ORM tables + Pydantic request/response schemas
-│  │  ├─ routers/       # students, colleges, shortlists, payments, portals
+│  │  ├─ routers/       # auth/session, students, colleges, shortlists, payments, portals
 │  │  ├─ services/      # Razorpay client, Firebase role claims
 │  │  └─ main.py        # FastAPI entry point
-│  ├─ migrations/        # Alembic 001–002
+│  ├─ migrations/        # Alembic 001–005
 │  ├─ seeds/             # colleges, demo role accounts
 │  ├─ tests/             # pytest suite
 │  ├─ Dockerfile
 │  ├─ requirements.txt
 │  ├─ requirements-dev.txt
 │  └─ .env.example
-├─ frontend/             # Next.js portals, components, hooks, tests
+├─ frontend/
+│  ├─ app/               # routes; each portal page is a server half + `*Client.tsx`
+│  ├─ lib/serverApi.ts   # serverGet (as the user) / publicGet (no credential)
+│  ├─ lib/sessionCookie.ts
+│  ├─ app/auth/session/  # route handler that sets and clears the cookie
+│  ├─ proxy.ts           # edge role gate (Next 16's middleware)
+│  └─ __tests__/         # Vitest suite
 ├─ docker-compose.yml    # Postgres + backend + frontend
 ├─ start.bat             # Windows setup and launch
 └─ README.md             # you are here
@@ -208,7 +285,17 @@ Backend checks:
 
 ```bash
 cd backend
+venv\Scripts\python -m pip install -r requirements-dev.txt   # pytest, ruff
+venv\Scripts\python -m ruff check .                          # what CI lints with
 venv\Scripts\python -m pytest -q
+```
+
+The database-backed tests need a `college_platform_test` database and skip
+cleanly without one, so a run with Postgres down reports passes and skips
+rather than a wall of connection errors:
+
+```bash
+docker exec college-platform-db createdb -U dev college_platform_test
 ```
 
 Frontend checks:
@@ -222,6 +309,31 @@ npm run lint
 
 Database-backed backend tests use `college_platform_test` on `localhost:5433`
 by default and rebuild an isolated schema for each test.
+
+## 🩺 Troubleshooting
+
+**`/colleges/` returns 500, `column cc.closing_date does not exist`** — the
+database predates a migration. Run `alembic upgrade head`. A database created
+before migration 003 will serve the portals fine and fail only on the public
+catalogue, which makes this easy to misread as a frontend bug.
+
+**Backend cannot reach Postgres** — check which port the container actually
+publishes. A container created by an older checkout may be bound to `5432`
+while `docker-compose.yml` now uses `5433`:
+
+```bash
+docker port college-platform-db
+```
+
+Point `DATABASE_URL` at whatever that prints rather than recreating the
+container, which would discard its volume.
+
+**Portal pages show "Checking your access" and then load** — that is the
+client-side fallback: the session cookie is missing or has lapsed, so the page
+is fetching for itself. Signing in again mints a new one. It is degraded
+performance, never a loss of access.
+
+---
 
 ## 📦 Production
 
@@ -315,12 +427,27 @@ RAZORPAY_WEBHOOK_SECRET=
 CORS_ORIGINS=http://localhost:3000
 ENVIRONMENT=development
 LOG_LEVEL=INFO
+# How long a minted session cookie stays valid. Firebase allows 5 minutes to
+# 14 days; 8 hours is the default. The frontend's two-hour idle logout is what
+# ends an unattended session sooner - this is the hard ceiling behind it.
+SESSION_MAX_AGE_SECONDS=28800
 ```
 
 Frontend `.env.local` only contains publishable `NEXT_PUBLIC_*` values. Never put
 Razorpay secrets or Firebase service-account credentials there.
 
 ## 📚 API overview
+
+Auth and session:
+
+- `POST /auth/session` — exchange a verified Firebase ID token for a session
+  cookie. Called by the Next.js route handler, never by the browser directly.
+- `DELETE /auth/session` — revoke every session the account holds
+- `GET /auth/me` — the verified claims behind the current credential; this is
+  what lets the server open the role gate before hydration
+
+Every authenticated endpoint accepts either `Authorization: Bearer <id token>`
+or `X-Session-Cookie: <session cookie>`.
 
 Students:
 

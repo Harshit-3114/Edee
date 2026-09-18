@@ -8,7 +8,7 @@ vi.mock('@/lib/api', () => ({
   apiErrorMessage: (_error: unknown, fallback: string) => fallback,
 }));
 
-const { default: AdminDashboardPage } = await import('@/app/admin/dashboard/page');
+const { default: AdminDashboardClient } = await import('@/app/admin/dashboard/AdminDashboardClient');
 
 const summary = {
   students: 1240,
@@ -56,7 +56,7 @@ describe('AdminDashboardPage', () => {
   });
 
   it('shows platform totals plus recent payments and activity', async () => {
-    render(<AdminDashboardPage />);
+    render(<AdminDashboardClient initial={null} />);
     expect(await screen.findByText('1,240')).toBeInTheDocument();
     expect(screen.getByText('Ananya Deshmukh')).toBeInTheDocument();
     expect(screen.getByText(/pay_Q2test/)).toBeInTheDocument();
@@ -76,7 +76,7 @@ describe('AdminDashboardPage', () => {
       if (url === '/admin/dashboard') return Promise.resolve({ data: summary });
       return Promise.resolve({ data: [] });
     });
-    render(<AdminDashboardPage />);
+    render(<AdminDashboardClient initial={null} />);
     await waitFor(() => {
       expect(screen.getByText('No payments yet.')).toBeInTheDocument();
       expect(screen.getByText('No events yet.')).toBeInTheDocument();

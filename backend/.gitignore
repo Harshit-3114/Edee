@@ -48,3 +48,8 @@ docker-compose.override.yml
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Local virtualenvs. `python -m venv .venv` is the documented setup, and
+# without this a `git add .` commits several thousand dependency files.
+.venv/
+venv/

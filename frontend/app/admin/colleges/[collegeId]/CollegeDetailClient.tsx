@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import { Buildings } from '@phosphor-icons/react';
 import Badge from '@/components/ui/Badge';
 import BackLink from '@/components/ui/BackLink';
@@ -17,9 +17,20 @@ import { formatDate, formatFee } from '@/lib/format';
 import { PORTAL_LABEL } from '@/lib/portals';
 import type { AdminCollegeDetail, CollegeType } from '@/lib/types';
 
-export default function CollegeDetailClient({ id }: { id: string }) {
-  const [college, setCollege] = useState<AdminCollegeDetail | null>(null);
-  const [loading, setLoading] = useState(true);
+/**
+ * `initialCollege` is the record the server already fetched with the session cookie.
+ * Null means it could not - no session, or the record is gone - and this loads
+ * it on mount, showing its own not-found or error state as it always did.
+ */
+export default function CollegeDetailClient({
+  id,
+  initialCollege,
+}: {
+  id: string;
+  initialCollege?: AdminCollegeDetail | null;
+}) {
+  const [college, setCollege] = useState<AdminCollegeDetail | null>(initialCollege ?? null);
+  const [loading, setLoading] = useState(!initialCollege);
   const [error, setError] = useState('');
   const [missing, setMissing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -40,7 +51,10 @@ export default function CollegeDetailClient({ id }: { id: string }) {
     }
   }, [id]);
 
+  // Only when the server could not supply it.
+  const served = useRef(Boolean(initialCollege));
   useEffect(() => {
+    if (served.current) return;
     void load();
   }, [load]);
 
@@ -356,3 +370,5 @@ export default function CollegeDetailClient({ id }: { id: string }) {
     </>
   );
 }
+
+export type InitialData = AdminCollegeDetail;

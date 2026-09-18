@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import { UserCircle } from '@phosphor-icons/react';
 import Badge, { type Tone } from '@/components/ui/Badge';
 import BackLink from '@/components/ui/BackLink';
@@ -34,9 +34,20 @@ const STAGE_TONE: Record<CohortStage, Tone> = {
  * form and no action buttons. If a request arrives to add one, it is a product
  * decision, not a UI gap.
  */
-export default function StudentDetailClient({ id }: { id: string }) {
-  const [student, setStudent] = useState<CohortStudentDetail | null>(null);
-  const [loading, setLoading] = useState(true);
+/**
+ * `initialStudent` is the record the server already fetched with the session cookie.
+ * Null means it could not - no session, or the record is gone - and this loads
+ * it on mount, showing its own not-found or error state as it always did.
+ */
+export default function StudentDetailClient({
+  id,
+  initialStudent,
+}: {
+  id: string;
+  initialStudent?: CohortStudentDetail | null;
+}) {
+  const [student, setStudent] = useState<CohortStudentDetail | null>(initialStudent ?? null);
+  const [loading, setLoading] = useState(!initialStudent);
   const [error, setError] = useState('');
   const [missing, setMissing] = useState(false);
 
@@ -56,7 +67,10 @@ export default function StudentDetailClient({ id }: { id: string }) {
     }
   }, [id]);
 
+  // Only when the server could not supply it.
+  const served = useRef(Boolean(initialStudent));
   useEffect(() => {
+    if (served.current) return;
     void load();
   }, [load]);
 
@@ -201,3 +215,5 @@ export default function StudentDetailClient({ id }: { id: string }) {
     </>
   );
 }
+
+export type InitialData = CohortStudentDetail;

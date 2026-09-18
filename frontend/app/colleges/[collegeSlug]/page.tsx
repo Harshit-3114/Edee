@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import FloatingUserMenu from '@/components/shells/FloatingUserMenu';
 import CollegeLandingClient from './CollegeLandingClient';
+import { publicGet } from '@/lib/serverApi';
+import type { CollegeLanding } from '@/lib/types';
 
 export const metadata: Metadata = { title: 'College' };
 
@@ -15,10 +17,13 @@ export default async function CollegeLandingPageRoute({
   params: Promise<{ collegeSlug: string }>;
 }) {
   const { collegeSlug } = await params;
+  const initialCollege = await publicGet<CollegeLanding>(
+    `/colleges/by-slug/${encodeURIComponent(collegeSlug)}`,
+  );
   return (
     <>
       <FloatingUserMenu />
-      <CollegeLandingClient slug={collegeSlug} />
+      <CollegeLandingClient slug={collegeSlug} initialCollege={initialCollege} />
     </>
   );
 }

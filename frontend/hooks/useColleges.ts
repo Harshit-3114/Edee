@@ -13,12 +13,20 @@ const PAGE_SIZE = 12;
  * do not necessarily come back in order. Without it the list can settle on the
  * results for a prefix the user has already moved past.
  */
-export function useColleges(query: CollegeQuery) {
-  const [colleges, setColleges] = useState<College[]>([]);
-  const [loading, setLoading] = useState(true);
+/**
+ * `initialColleges` is the unfiltered first page a server component already
+ * fetched - exactly what this shows before anyone types or picks a filter.
+ * Only the first effect run is skipped; every search and filter change still
+ * goes to the network, debounce and abort behaviour untouched.
+ */
+export function useColleges(query: CollegeQuery, initialColleges?: College[] | null) {
+  const [colleges, setColleges] = useState<College[]>(initialColleges ?? []);
+  const [loading, setLoading] = useState(!initialColleges);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
-  const [hasMore, setHasMore] = useState(false);
+  const [hasMore, setHasMore] = useState(
+    initialColleges ? initialColleges.length === PAGE_SIZE : false,
+  );
   const [offset, setOffset] = useState(0);
 
   const abortRef = useRef<AbortController | null>(null);
@@ -62,7 +70,14 @@ export function useColleges(query: CollegeQuery) {
     [search, stream, state, type],
   );
 
+  // Skips exactly one run: the unfiltered first page the server already
+  // fetched. Cleared immediately, so searching and filtering still work.
+  const served = useRef(Boolean(initialColleges));
   useEffect(() => {
+    if (served.current) {
+      served.current = false;
+      return;
+    }
     const timer = setTimeout(() => void fetchPage(0, false), search ? 300 : 0);
     return () => clearTimeout(timer);
   }, [fetchPage, search]);
