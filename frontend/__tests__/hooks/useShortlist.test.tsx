@@ -16,6 +16,7 @@ vi.mock('@/lib/api', () => ({
 }));
 
 const { useShortlist } = await import('@/hooks/useShortlist');
+const { clearApiCache } = await import('@/lib/apiCache');
 
 const entry: ShortlistEntry = {
   id: 'sl-1',
@@ -33,6 +34,9 @@ const entry: ShortlistEntry = {
 
 describe('useShortlist', () => {
   beforeEach(() => {
+    // The shortlist now reads through a module-level cache. Each test is a
+    // fresh session, so start it with an empty one.
+    clearApiCache();
     get.mockReset();
     post.mockReset().mockResolvedValue({});
     del.mockReset().mockResolvedValue({});

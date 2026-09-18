@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import FloatingUserMenu from '@/components/shells/FloatingUserMenu';
 import Button from '@/components/ui/Button';
 import { logger } from '@/lib/logger';
 
@@ -16,6 +17,8 @@ export default function GlobalError({
   }, [error]);
 
   return (
+    <>
+      <FloatingUserMenu />
     <main
       id="main"
       className="mx-auto flex min-h-[100dvh] max-w-md flex-col justify-center gap-5 px-6 text-center"
@@ -29,5 +32,6 @@ export default function GlobalError({
         <Button onClick={reset}>Try again</Button>
       </div>
     </main>
+    </>
   );
 }

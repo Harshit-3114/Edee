@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import FloatingUserMenu from '@/components/shells/FloatingUserMenu';
 import SignupClient from './SignupClient';
 
 export const metadata: Metadata = { title: 'Complete your profile' };
@@ -6,5 +7,10 @@ export const metadata: Metadata = { title: 'Complete your profile' };
 export const dynamic = 'force-dynamic';
 
 export default function SignupPage() {
-  return <SignupClient />;
+  return (
+    <>
+      <FloatingUserMenu />
+      <SignupClient />
+    </>
+  );
 }

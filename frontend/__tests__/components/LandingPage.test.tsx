@@ -1,6 +1,15 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import LandingPage from '@/app/(public)/page';
+
+// useRole (via the header / back link) subscribes to the Firebase token.
+// These tests render the page as a signed-out visitor.
+vi.mock('firebase/auth', () => ({
+  onIdTokenChanged: (_auth: unknown, cb: (user: null) => void) => {
+    cb(null);
+    return () => {};
+  },
+}));
 
 describe('LandingPage', () => {
   it('brands the product as Edee Apply', () => {

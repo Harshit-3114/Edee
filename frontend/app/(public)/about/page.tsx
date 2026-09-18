@@ -195,11 +195,11 @@ export default function AboutPage() {
                 We’re always looking for curious builders who care about education equity. Check our careers page or drop us a line.
               </p>
               <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-                <LinkButton href="/contact" className="btn" size="md">
+                <LinkButton prefetch={false} href="/contact" className="btn" size="md">
                   Get in touch
                   <ArrowRight size={16} weight="bold" />
                 </LinkButton>
-                <LinkButton href="/colleges" variant="secondary" className="btn border-white/30 bg-white/95" size="md">
+                <LinkButton prefetch={false} href="/colleges" variant="secondary" className="btn border-white/30 bg-white/95" size="md">
                   See the platform
                 </LinkButton>
               </div>

@@ -81,11 +81,11 @@ export default function WhyUsPage() {
             </Reveal>
             <Reveal delay={240}>
               <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-                <LinkButton href="/login" className="btn" size="md">
+                <LinkButton prefetch={false} href="/login" className="btn" size="md">
                   Start your shortlist
                   <ArrowRight size={16} weight="bold" />
                 </LinkButton>
-                <LinkButton href="/colleges" variant="secondary" className="btn" size="md">
+                <LinkButton prefetch={false} href="/colleges" variant="secondary" className="btn" size="md">
                   Browse colleges
                 </LinkButton>
               </div>
@@ -186,11 +186,11 @@ export default function WhyUsPage() {
                 Create a free account, build your shortlist, and pay once. Colleges see your application the moment payment clears.
               </p>
               <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-                <LinkButton href="/login" className="btn" size="md">
+                <LinkButton prefetch={false} href="/login" className="btn" size="md">
                   Get started free
                   <ArrowRight size={16} weight="bold" />
                 </LinkButton>
-                <LinkButton href="/colleges" variant="secondary" className="btn border-white/30 bg-white/95" size="md">
+                <LinkButton prefetch={false} href="/colleges" variant="secondary" className="btn border-white/30 bg-white/95" size="md">
                   Explore colleges
                 </LinkButton>
               </div>

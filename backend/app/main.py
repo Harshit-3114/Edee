@@ -13,6 +13,7 @@ from app.core.logging import configure_logging, new_request_id
 from app.core.rate_limit import limiter, rate_limit_handler
 from app.db.connection import init_db
 from app.routers import (
+    auth as auth_router,
     students,
     colleges,
     shortlists,
@@ -175,6 +176,7 @@ async def unhandled_exception(request: Request, exc: Exception):
     return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
 
+app.include_router(auth_router.router, prefix="/auth", tags=["auth"])
 app.include_router(students.router, prefix="/students", tags=["student"])
 app.include_router(colleges.router, prefix="/colleges", tags=["student"])
 app.include_router(shortlists.router, prefix="/shortlists", tags=["student"])

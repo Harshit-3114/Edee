@@ -5,10 +5,13 @@ import { resolve } from 'node:path';
 const css = readFileSync(resolve(__dirname, '../app/globals.css'), 'utf8');
 
 describe('design tokens', () => {
-  it('locks single emerald accent and deletes maroon/gold', () => {
-    expect(css).toContain('--accent: #047857');
-    expect(css).toContain('--accent-hover: #065f46');
-    expect(css).not.toContain('#D9475C');
+  it('locks a single maroon accent with no second accent', () => {
+    expect(css).toContain('--accent: #7f1d1d');
+    expect(css).toContain('--accent-hover: #641414');
+    expect(css).toContain('--pine: #3d0b0b');
+    expect(css).toContain('--focus-ring: #7f1d1d');
+    // No emerald left anywhere in the accent ramp.
+    expect(css).not.toContain('--accent: #047857');
     expect(css).not.toContain('#F2BB5D');
     expect(css).not.toContain('--accent-secondary');
   });

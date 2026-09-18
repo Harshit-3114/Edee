@@ -3,7 +3,7 @@
 /*
   Design tokens.
 
-  One accent for the whole product (emerald). Portal identity comes from the
+  One accent for the whole product (maroon). Portal identity comes from the
   nav and the content, never from a different accent colour - a student and an
   admin should feel they are in the same product, one floor apart.
 
@@ -48,13 +48,13 @@
   --line-strong: #d4d4d8;
 
   /* Accent - locked for the whole product */
-  --accent: #047857;
-  --accent-hover: #065f46;
-  --accent-pressed: #064e3b;
-  --pine: #0b3d2e;
-  --accent-subtle: #c6e9d4;
-  --accent-line: #a7f3d0;
-  --accent-text: #065f46;
+  --accent: #7f1d1d;
+  --accent-hover: #641414;
+  --accent-pressed: #4c1010;
+  --pine: #3d0b0b;
+  --accent-subtle: #f0d6d6;
+  --accent-line: #e4b8b8;
+  --accent-text: #641414;
 
   /* Status */
   --success: #047857;
@@ -74,7 +74,7 @@
   --warning-line: #fde68a;
   --warning-solid: #92400e;
 
-  --focus-ring: #047857;
+  --focus-ring: #7f1d1d;
 
   /* Shadows are tinted to the surface hue, never pure black. */
   --shadow-sm: 0 1px 2px rgb(24 24 27 / 0.06);
@@ -83,7 +83,7 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    /* Light-locked: dark preference still renders the emerald light theme. */
+    /* Light-locked: dark preference still renders the maroon light theme. */
     color-scheme: light;
 
     --surface: #ffffff;
@@ -99,13 +99,13 @@
     --line: #e4e4e7;
     --line-strong: #d4d4d8;
 
-    --accent: #047857;
-    --accent-hover: #34d399;
-    --accent-pressed: #10b981;
-    --pine: #0b3d2e;
-    --accent-subtle: #c6e9d4;
-    --accent-line: #a7f3d0;
-    --accent-text: #065f46;
+    --accent: #7f1d1d;
+    --accent-hover: #c26b6b;
+    --accent-pressed: #a34d4d;
+    --pine: #3d0b0b;
+    --accent-subtle: #f0d6d6;
+    --accent-line: #e4b8b8;
+    --accent-text: #641414;
 
     --success: #047857;
     --success-subtle: #c6e9d4;
@@ -124,7 +124,7 @@
     --warning-line: #fde68a;
     --warning-solid: #92400e;
 
-    --focus-ring: #047857;
+    --focus-ring: #7f1d1d;
 
     --shadow-sm: 0 1px 2px rgb(24 24 27 / 0.06);
     --shadow-md: 0 4px 16px -4px rgb(24 24 27 / 0.1);

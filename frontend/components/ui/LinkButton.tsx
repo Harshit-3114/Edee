@@ -29,17 +29,21 @@ export default function LinkButton({
   variant = 'primary',
   size = 'md',
   className = '',
+  prefetch,
   children,
 }: {
   href: string;
   variant?: Variant;
   size?: Size;
   className?: string;
+  /** false on public pages: fetch a page when it is asked for, not before. */
+  prefetch?: boolean;
   children: React.ReactNode;
 }) {
   return (
     <Link
       href={href}
+      prefetch={prefetch}
       className={[
         'inline-flex shrink-0 items-center justify-center gap-2 rounded-lg font-medium whitespace-nowrap',
         'transition-[background-color,color,transform] duration-150 active:translate-y-px',

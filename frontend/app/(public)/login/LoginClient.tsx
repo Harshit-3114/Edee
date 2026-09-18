@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -19,6 +19,8 @@ import PhoneOTPForm from '@/components/auth/PhoneOTPForm';
 import Button from '@/components/ui/Button';
 import { ErrorState, Skeleton } from '@/components/ui/States';
 import { useAuth } from '@/hooks/useAuth';
+import { useRole } from '@/hooks/useRole';
+import { isDevModeForced } from '@/lib/devSession';
 import {
   PORTAL_HOME,
   PORTAL_LABEL,
@@ -47,6 +49,7 @@ function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
   const { user, loading } = useAuth();
+  const { role: currentRole, loading: roleLoading } = useRole();
   const [error, setError] = useState('');
   const [routing, setRouting] = useState(false);
   const [wrongPortal, setWrongPortal] = useState<Role | null>(null);
@@ -54,6 +57,9 @@ function LoginForm() {
   const next = params.get('next');
   const picked = params.get('portal');
   const portal: Role = isRole(picked) ? picked : 'student';
+  // useIdleLogout lands here after two hours of no interaction. Say so, or
+  // being bounced to sign-in mid-task looks like a fault.
+  const timedOut = params.get('timeout') === '1';
   // Dev backend (or no Firebase keys): the phone/Google forms below would
   // only print "not configured" errors, so the dev bypass replaces them.
   const devBypass = useDevBypass();
@@ -97,7 +103,27 @@ function LoginForm() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, user]);
 
-  if (loading || routing) {
+  // Whether they were *already* signed in when this page opened, as opposed to
+  // signing in on it just now. Only the first answer counts: signing in here
+  // must still reach route() above, which is what reports a wrong-portal
+  // mismatch instead of silently landing them somewhere they did not choose.
+  const arrivedSignedIn = useRef<boolean | null>(null);
+  if (!roleLoading && arrivedSignedIn.current === null) {
+    arrivedSignedIn.current = currentRole !== null;
+  }
+  // proxy.ts turns most of these away at the edge, but its cookie lasts an
+  // hour while a session lasts longer, and a dev-token session never reaches
+  // useAuth at all. This catches both. `next` and dev mode are exempt for the
+  // same reasons the edge guard exempts them.
+  const bouncing = Boolean(
+    arrivedSignedIn.current && currentRole && !next && !isDevModeForced(),
+  );
+
+  useEffect(() => {
+    if (bouncing && currentRole) router.replace(PORTAL_HOME[currentRole]);
+  }, [bouncing, currentRole, router]);
+
+  if (loading || routing || roleLoading || bouncing) {
     return (
       <div className="flex flex-col gap-3" role="status" aria-live="polite">
         <span className="sr-only">Signing you in</span>
@@ -109,6 +135,16 @@ function LoginForm() {
 
   return (
     <>
+      {timedOut && (
+        <p
+          role="status"
+          className="mb-4 rounded-lg border border-[var(--warning-line)] bg-[var(--warning-subtle)] px-4 py-3 text-[13px] leading-relaxed text-[var(--text-primary)]"
+        >
+          You were signed out after 2 hours of inactivity. Sign in to pick up where you
+          left off.
+        </p>
+      )}
+
       <div role="group" aria-label="Choose your portal" className="grid grid-cols-4 gap-2">
         {PORTAL_OPTIONS.map(({ role, Icon }) => {
           const selected = role === portal;

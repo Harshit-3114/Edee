@@ -8,8 +8,11 @@ import Field from '@/components/ui/Field';
 import { Input, Select } from '@/components/ui/Input';
 import { ErrorState } from '@/components/ui/States';
 import { useAuth } from '@/hooks/useAuth';
+import { useRole } from '@/hooks/useRole';
+import { isDevModeForced } from '@/lib/devSession';
 import api, { apiErrorMessage } from '@/lib/api';
 import { isValidIndianMobile } from '@/lib/format';
+import { PORTAL_HOME } from '@/lib/portals';
 import { syncSessionCookie } from '@/lib/session';
 import type { Stream } from '@/lib/types';
 
@@ -24,6 +27,7 @@ import type { Stream } from '@/lib/types';
 export default function SignupClient() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
+  const { role, loading: roleLoading } = useRole();
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -45,6 +49,16 @@ export default function SignupClient() {
   useEffect(() => {
     if (!authLoading && !user) router.replace('/login');
   }, [authLoading, user, router]);
+
+  // A role claim means this profile already exists - the backend grants the
+  // claim as it creates it. Signing up again is not a thing, so send them to
+  // their portal rather than showing the form a second time. Dev mode is
+  // exempt, matching proxy.ts: both sign-in screens stay reachable there.
+  const bouncing = !roleLoading && role !== null && !isDevModeForced();
+
+  useEffect(() => {
+    if (bouncing && role) router.replace(PORTAL_HOME[role]);
+  }, [bouncing, role, router]);
 
   function validate(): boolean {
     const next: Record<string, string> = {};
@@ -79,6 +93,14 @@ export default function SignupClient() {
     } finally {
       setBusy(false);
     }
+  }
+
+  if (roleLoading || bouncing) {
+    return (
+      <main id="main" className="flex min-h-[100dvh] items-center justify-center px-6" role="status" aria-live="polite">
+        <span className="sr-only">Taking you to your portal</span>
+      </main>
+    );
   }
 
   return (

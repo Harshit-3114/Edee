@@ -1,7 +1,16 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import CollegeLandingPage from '@/components/college/CollegeLandingPage';
 import type { CollegeLanding } from '@/lib/types';
+
+// useRole (via the header / back link) subscribes to the Firebase token.
+// These tests render the page as a signed-out visitor.
+vi.mock('firebase/auth', () => ({
+  onIdTokenChanged: (_auth: unknown, cb: (user: null) => void) => {
+    cb(null);
+    return () => {};
+  },
+}));
 
 const landing: CollegeLanding = {
   id: 'col-1',

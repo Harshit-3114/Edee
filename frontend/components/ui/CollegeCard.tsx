@@ -32,7 +32,7 @@ export default function CollegeCard({ college, index }: CollegeCardProps) {
 
   return (
     <li style={style} className="card animate-fade-up">
-      <Link href={href} className="block" aria-label={`${college.name} details`}>
+      <Link href={href} prefetch={false} className="block" aria-label={`${college.name} details`}>
         {/* Hero image, falling back to a campus photo so no tile is ever grey */}
         <div className="relative aspect-[16/9] w-full overflow-hidden rounded-t-lg bg-[var(--surface-sunken)]">
           <Image

@@ -1,7 +1,10 @@
+import FloatingUserMenu from '@/components/shells/FloatingUserMenu';
 import LinkButton from '@/components/ui/LinkButton';
 
 export default function UnauthorisedPage() {
   return (
+    <>
+      <FloatingUserMenu />
     <main
       id="main"
       className="mx-auto flex min-h-[100dvh] max-w-md flex-col justify-center gap-5 px-6 text-center"
@@ -15,5 +18,6 @@ export default function UnauthorisedPage() {
         <LinkButton href="/login">Back to sign in</LinkButton>
       </div>
     </main>
+    </>
   );
 }

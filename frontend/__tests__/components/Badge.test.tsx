@@ -11,7 +11,7 @@ describe('Badge', () => {
     expect(el.className).toContain('var(--action-solid)');
   });
 
-  it('maps payment_received to emerald, not info-blue', () => {
+  it('maps payment_received to the success tone, not info-blue', () => {
     expect(APPLICATION_STATUS_TONE.payment_received).toBe('success');
   });
 });

@@ -1,5 +1,5 @@
-import BackLink from '@/components/ui/BackLink';
-import LinkButton from '@/components/ui/LinkButton';
+import LandingBackLink from './LandingBackLink';
+import LandingCta from './LandingCta';
 import { Table, TableWrap, Td, Th, Tr } from '@/components/ui/Table';
 import { formatFee } from '@/lib/format';
 import type { CollegeLanding } from '@/lib/types';
@@ -25,7 +25,7 @@ export default function CollegeLandingPage({ college }: { college: CollegeLandin
 
   return (
     <main id="main" className="mx-auto max-w-5xl px-6 py-10">
-      <BackLink href="/" label="Home" />
+      <LandingBackLink />
 
       {/* Hero with optional image or flat placeholder */}
       <section className="relative rounded-xl overflow-hidden bg-[var(--surface-sunken)] animate-fade-up" style={stagger(0)}>
@@ -144,10 +144,7 @@ export default function CollegeLandingPage({ college }: { college: CollegeLandin
           <p className="mt-1 text-sm leading-relaxed text-[var(--text-secondary)]">
             Shortlist these courses and pay once. The college sees your application the moment payment clears.
           </p>
-          <div className="mt-5 flex flex-wrap gap-3">
-            <LinkButton href="/student/colleges" className="btn">Shortlist courses</LinkButton>
-            <LinkButton href="/signup" variant="secondary" className="btn">Create account</LinkButton>
-          </div>
+          <LandingCta />
         </div>
       </section>
     </main>

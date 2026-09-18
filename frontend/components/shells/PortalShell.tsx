@@ -9,6 +9,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { PORTAL_LABEL, type Role } from '@/lib/portals';
 import { PORTAL_NAV } from './nav';
 import NotificationBell from './NotificationBell';
+import UserMenu from './UserMenu';
 
 /**
  * One top header for all four portals — the nav lives in the header.
@@ -57,7 +58,6 @@ export default function PortalShell({
               alt=""
               width={32}
               height={32}
-              priority
               className="rounded-md bg-white/95 p-0.5"
             />
             <span className="flex items-baseline gap-2">
@@ -90,14 +90,7 @@ export default function PortalShell({
             <div className="hidden sm:block">
               <NotificationBell enabled={Boolean(user)} />
             </div>
-            {user?.email && (
-              <span
-                aria-hidden="true"
-                className="hidden h-9 w-9 items-center justify-center rounded-full bg-[var(--accent)] text-sm font-semibold text-white sm:inline-flex"
-              >
-                {user.email.slice(0, 1).toUpperCase()}
-              </span>
-            )}
+            <UserMenu />
 
             <button
               type="button"

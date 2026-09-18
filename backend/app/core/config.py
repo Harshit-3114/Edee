@@ -18,6 +18,12 @@ class Settings(BaseSettings):
     # boot with it set to 1.
     DEV_MODE: Optional[bool] = None
 
+    # How long a minted session cookie stays valid. Firebase allows 5 minutes
+    # to 14 days. Eight hours covers a working day; the frontend's two-hour
+    # idle logout is what ends an unattended session sooner, and this is the
+    # hard ceiling behind it.
+    SESSION_MAX_AGE_SECONDS: int = 8 * 60 * 60
+
     # SQL echo prints every statement with its parameters. Off by default:
     # the per-request log line already shows method, path, and latency.
     # Set SQL_ECHO=1 only when debugging a specific query.
@@ -35,6 +41,17 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.ENVIRONMENT.lower() in {"production", "prod"}
+
+    @field_validator("SESSION_MAX_AGE_SECONDS")
+    @classmethod
+    def _firebase_session_bounds(cls, value: int) -> int:
+        # Firebase rejects anything outside this range at mint time; catching
+        # it at boot beats discovering it on somebody's first sign-in.
+        if not (5 * 60 <= value <= 14 * 24 * 60 * 60):
+            raise ValueError(
+                "SESSION_MAX_AGE_SECONDS must be between 5 minutes and 14 days"
+            )
+        return value
 
     @field_validator("ENVIRONMENT")
     @classmethod

@@ -14,7 +14,7 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 
 /*
   Contrast is checked per variant, not left to chance:
-  - primary   white text on emerald-800 (light) / near-black on emerald-400 (dark)
+  - primary   white text on maroon-800 (light) / near-black on maroon-400 (dark)
   - secondary primary text on the raised surface, with a visible border
   - ghost     primary text, border only on hover, never transparent-on-transparent
   - danger    white text on red-700 (light) / near-black on red-400 (dark)

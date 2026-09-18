@@ -94,11 +94,11 @@ export default function LandingPage() {
                 application fees in a single transaction.
               </p>
 <div className="mt-8 flex flex-wrap items-center gap-3">
-              <LinkButton href="/login" className="btn">
+              <LinkButton prefetch={false} href="/login" className="btn">
                 Get started
                 <ArrowRight size={15} weight="bold" />
               </LinkButton>
-              <LinkButton href="#how-it-works" variant="secondary" className="btn">
+              <LinkButton prefetch={false} href="#how-it-works" variant="secondary" className="btn">
                 See how it works
               </LinkButton>
             </div>
@@ -207,7 +207,7 @@ export default function LandingPage() {
                   same course.
                 </p>
                 <p className="mt-6">
-                  <LinkButton href="/login" className="btn">
+                  <LinkButton prefetch={false} href="/login" className="btn">
                     Start your shortlist
                     <ArrowRight size={15} weight="bold" />
                   </LinkButton>
@@ -284,7 +284,7 @@ export default function LandingPage() {
                 </p>
               </div>
               <div className="flex flex-wrap gap-3 lg:justify-end">
-                <LinkButton
+                <LinkButton prefetch={false}
                   href="/login"
                   className="border-transparent bg-[var(--surface-raised)] text-[var(--text-primary)] hover:bg-[var(--surface-hover)] btn"
                 >

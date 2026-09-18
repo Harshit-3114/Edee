@@ -29,6 +29,15 @@ export function useAuth() {
     if (auth) await fbSignOut(auth);
     clearDevToken();
     clearSessionCookie();
+    // Whatever this account read stays in memory until it is dropped, and the
+    // next sign-in happens in the same tab.
+    //
+    // Imported here rather than at the top of the file on purpose: this module
+    // reaches the public pages through the header's account menu, and a static
+    // import would pull the API client - and axios with it - onto every
+    // marketing page to serve a function only a signed-in user ever calls.
+    const { clearApiCache } = await import('@/lib/apiCache');
+    clearApiCache();
   }
 
   return { user, loading, signOut };

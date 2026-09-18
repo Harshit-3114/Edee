@@ -1,7 +1,10 @@
+import FloatingUserMenu from '@/components/shells/FloatingUserMenu';
 import LinkButton from '@/components/ui/LinkButton';
 
 export default function NotFound() {
   return (
+    <>
+      <FloatingUserMenu />
     <main
       id="main"
       className="mx-auto flex min-h-[100dvh] max-w-md flex-col justify-center gap-5 px-6 text-center"
@@ -14,5 +17,6 @@ export default function NotFound() {
         <LinkButton href="/">Go to the home page</LinkButton>
       </div>
     </main>
+    </>
   );
 }

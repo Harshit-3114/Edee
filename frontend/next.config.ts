@@ -21,6 +21,37 @@ const nextConfig: NextConfig = {
     // remotePatterns: [{ protocol: 'https', hostname: 'example.com' }],
   },
 
+  // Caching is split by audience, never applied globally.
+  //
+  // Public marketing and catalogue pages are the same for everyone, so a CDN
+  // may hold them and a browser may reuse them: s-maxage lets the edge serve a
+  // stored copy, stale-while-revalidate refreshes it in the background, and
+  // max-age=0 keeps the browser revalidating so an edit is never stuck on
+  // someone's machine.
+  //
+  // Everything behind a portal is one person's data. Those paths get no-store,
+  // so nothing personal can be held by a CDN, a proxy, or the back button.
+  async headers() {
+    const PUBLIC_CACHE =
+      'public, max-age=0, s-maxage=3600, stale-while-revalidate=86400';
+    const publicPaths = ['/', '/about', '/why-us', '/contact', '/colleges', '/colleges/:slug'];
+
+    return [
+      ...publicPaths.map((source) => ({
+        source,
+        headers: [{ key: 'Cache-Control', value: PUBLIC_CACHE }],
+      })),
+      {
+        // Portals, plus the screens that carry an account into existence.
+        source: '/:path(student|college|coaching|admin|login|signup):rest(/.*)?',
+        headers: [
+          { key: 'Cache-Control', value: 'private, no-store' },
+          { key: 'Vary', value: 'Cookie' },
+        ],
+      },
+    ];
+  },
+
   // All API calls go to FastAPI, never to Next.js route handlers.
   async rewrites() {
     return [

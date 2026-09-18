@@ -50,17 +50,64 @@ bearer = HTTPBearer(auto_error=False)
 
 VALID_ROLES = {"student", "college", "coaching", "admin"}
 
+# Header the Next.js server uses to present a session cookie it holds for the
+# user. Deliberately a header and not a cookie on this origin: a browser will
+# never attach it by itself, so no cross-site page can ride an ambient
+# credential into this API. Only a server that already holds the cookie can
+# send it, which is what makes this path CSRF-free by construction rather than
+# by a token check we would have to keep correct.
+SESSION_HEADER = "X-Session-Cookie"
+
+
+def _verify_session_cookie(cookie: str) -> dict:
+    """Verify a session cookie minted by POST /auth/session."""
+    if is_dev_mode():
+        claims = parse_dev_token(cookie)
+        if claims is not None:
+            return claims
+        raise HTTPException(status_code=401, detail="Invalid dev session")
+
+    try:
+        return firebase_auth.verify_session_cookie(
+            cookie, check_revoked=True, app=_firebase_app()
+        )
+    except firebase_auth.ExpiredSessionCookieError:
+        raise HTTPException(status_code=401, detail="Session expired, sign in again")
+    except firebase_auth.RevokedSessionCookieError:
+        raise HTTPException(status_code=401, detail="Session revoked, sign in again")
+    except firebase_auth.UserDisabledError:
+        raise HTTPException(status_code=403, detail="This account is disabled")
+    except firebase_auth.InvalidSessionCookieError:
+        raise HTTPException(status_code=401, detail="Invalid session")
+    except Exception:
+        # Same reasoning as the ID-token path: the underlying error separates
+        # "malformed" from "wrong project", which is free reconnaissance.
+        logger.exception("Session cookie verification failed")
+        raise HTTPException(status_code=401, detail="Authentication failed")
+
 
 async def get_current_user(
+    request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer),
 ) -> dict:
     """
-    Verifies the Firebase ID token on every request and returns its claims.
+    Answers "who is this" from either credential the platform issues.
 
-    check_revoked=True is not optional. Without it, revoking a compromised
-    account's refresh tokens does nothing until the ID token expires by itself,
-    leaving an attacker up to an hour of continued access. It costs one lookup.
+    Two ways in, verified by two different Firebase calls that cannot be
+    confused for one another:
+
+      Authorization: Bearer <id token>   the browser, calling directly
+      X-Session-Cookie: <session cookie> the Next.js server, rendering a page
+
+    check_revoked=True is not optional on either. Without it, revoking a
+    compromised account's refresh tokens does nothing until the credential
+    expires by itself, leaving an attacker up to an hour of continued access.
+    It costs one lookup.
     """
+    session_cookie = request.headers.get(SESSION_HEADER)
+    if session_cookie:
+        return _verify_session_cookie(session_cookie)
+
     if credentials is None or not credentials.credentials:
         raise HTTPException(
             status_code=401,

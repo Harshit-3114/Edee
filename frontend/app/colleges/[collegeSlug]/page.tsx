@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import FloatingUserMenu from '@/components/shells/FloatingUserMenu';
 import CollegeLandingClient from './CollegeLandingClient';
 
 export const metadata: Metadata = { title: 'College' };
@@ -14,5 +15,10 @@ export default async function CollegeLandingPageRoute({
   params: Promise<{ collegeSlug: string }>;
 }) {
   const { collegeSlug } = await params;
-  return <CollegeLandingClient slug={collegeSlug} />;
+  return (
+    <>
+      <FloatingUserMenu />
+      <CollegeLandingClient slug={collegeSlug} />
+    </>
+  );
 }

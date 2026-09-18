@@ -20,6 +20,10 @@ vi.mock('firebase/auth', () => ({
     cb(null);
     return () => {};
   },
+  onIdTokenChanged: (_auth: unknown, cb: (user: null) => void) => {
+    cb(null);
+    return () => {};
+  },
 }));
 
 vi.mock('@/hooks/useAuth', () => ({

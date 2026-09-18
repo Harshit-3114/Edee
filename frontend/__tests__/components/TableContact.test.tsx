@@ -34,7 +34,7 @@ describe('table + contact', () => {
     expect(contact).toContain('EnvelopeSimple');
   });
 
-  it('rings inputs in emerald on focus', () => {
+  it('rings inputs in the accent colour on focus', () => {
     expect(input).toContain('focus:border-[var(--accent)]');
     expect(input).toContain('focus:ring-[var(--accent)]/20');
   });

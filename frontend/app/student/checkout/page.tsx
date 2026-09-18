@@ -110,7 +110,7 @@ export default function CheckoutPage() {
         email: user?.email ?? undefined,
         contact: user?.phoneNumber ?? undefined,
       },
-      theme: { color: '#047857' },
+      theme: { color: '#7f1d1d' },
       // The webhook is the source of truth for the application records. This
       // handler only confirms to the payer that the payment went through.
       //

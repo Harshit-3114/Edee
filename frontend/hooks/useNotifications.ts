@@ -4,7 +4,13 @@ import { useCallback, useEffect, useState } from 'react';
 import api, { apiErrorMessage } from '@/lib/api';
 import type { Notification } from '@/lib/types';
 
-const POLL_MS = 60_000;
+/**
+ * A background tab has nobody reading it, so it polls nothing: the interval is
+ * torn down when the page is hidden and a fresh load runs the moment it comes
+ * back. Three minutes rather than one - this feeds a badge count, and a tab
+ * left open all day was costing sixty requests an hour to keep a number warm.
+ */
+const POLL_MS = 180_000;
 
 /** The header bell's data: latest notifications plus the unread badge count. */
 export function useNotifications(enabled: boolean) {
@@ -28,9 +34,34 @@ export function useNotifications(enabled: boolean) {
 
   useEffect(() => {
     if (!enabled) return;
-    void load();
-    const timer = setInterval(() => void load(), POLL_MS);
-    return () => clearInterval(timer);
+
+    let timer: ReturnType<typeof setInterval> | null = null;
+
+    function stop() {
+      if (timer !== null) {
+        clearInterval(timer);
+        timer = null;
+      }
+    }
+
+    function start() {
+      stop();
+      void load();
+      timer = setInterval(() => void load(), POLL_MS);
+    }
+
+    function onVisibilityChange() {
+      if (document.visibilityState === 'visible') start();
+      else stop();
+    }
+
+    if (document.visibilityState === 'visible') start();
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    return () => {
+      stop();
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
   }, [enabled, load]);
 
   const markRead = useCallback(

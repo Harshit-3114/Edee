@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import api, { apiErrorMessage } from '@/lib/api';
+import { cachedGet, invalidateApiCache } from '@/lib/apiCache';
 import { sumFees } from '@/lib/format';
 import type { ShortlistEntry } from '@/lib/types';
 
@@ -32,9 +33,14 @@ export function useShortlist(): UseShortlist {
   const [error, setError] = useState('');
   const [pending, setPending] = useState<Set<string>>(new Set());
 
-  const reload = useCallback(async () => {
+  // Read through the cache. The shortlist is read on the colleges browser, the
+  // shortlist page and checkout, so moving between them used to refetch the
+  // same list three times. `force` is for after a write, which must not be
+  // allowed to read back a copy made before it.
+  const reload = useCallback(async (force = false) => {
     try {
-      const { data } = await api.get<ShortlistEntry[]>('/shortlists/');
+      if (force) invalidateApiCache('/shortlists/');
+      const data = await cachedGet<ShortlistEntry[]>('/shortlists/');
       setEntries(data);
       setError('');
     } catch (err) {
@@ -62,7 +68,7 @@ export function useShortlist(): UseShortlist {
       markPending(courseId, true);
       try {
         await api.post('/shortlists/', { college_id: collegeId, course_id: courseId });
-        await reload();
+        await reload(true);
       } catch (err) {
         setError(apiErrorMessage(err, 'Could not add that course.'));
       } finally {
@@ -78,7 +84,7 @@ export function useShortlist(): UseShortlist {
       if (entry) markPending(entry.course_id, true);
       try {
         await api.delete(`/shortlists/${shortlistId}`);
-        await reload();
+        await reload(true);
       } catch (err) {
         setError(apiErrorMessage(err, 'Could not remove that course.'));
       } finally {

@@ -1,12 +1,16 @@
 import type { Metadata, Viewport } from 'next';
-import '@fontsource/mulish/400.css';
-import '@fontsource/mulish/500.css';
-import '@fontsource/mulish/600.css';
-import '@fontsource/mulish/700.css';
-import '@fontsource/poppins/500.css';
-import '@fontsource/poppins/600.css';
-import '@fontsource/poppins/700.css';
+// Latin subsets only, and only the weights the UI actually renders. The full
+// imports declared cyrillic, vietnamese and devanagari faces that no page can
+// reach, plus a Poppins 500 that nothing uses. unicode-range meant those files
+// were never downloaded, but every declaration still shipped in the CSS.
+import '@fontsource/mulish/latin-400.css';
+import '@fontsource/mulish/latin-500.css';
+import '@fontsource/mulish/latin-600.css';
+import '@fontsource/mulish/latin-700.css';
+import '@fontsource/poppins/latin-600.css';
+import '@fontsource/poppins/latin-700.css';
 import './globals.css';
+import SessionTimeout from '@/components/auth/SessionTimeout';
 
 export const metadata: Metadata = {
   title: {
@@ -39,6 +43,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         >
           Skip to content
         </a>
+        <SessionTimeout />
         {children}
       </body>
     </html>

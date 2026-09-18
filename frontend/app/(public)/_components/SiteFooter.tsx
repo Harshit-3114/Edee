@@ -31,6 +31,7 @@ export default function SiteFooter() {
               <Link
                 key={link.href}
                 href={link.href}
+                prefetch={false}
                 className="text-white/70 transition-colors hover:text-white"
               >
                 {link.label}
@@ -42,6 +43,7 @@ export default function SiteFooter() {
               <Link
                 key={link.href}
                 href={link.href}
+                prefetch={false}
                 className="text-white/70 transition-colors hover:text-white"
               >
                 {link.label}
