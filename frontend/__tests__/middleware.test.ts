@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { NextRequest } from 'next/server';
-import { middleware } from '@/middleware';
+import { proxy as middleware } from '@/proxy';
 import { ROLE_COOKIE } from '@/lib/portals';
 
 function request(path: string, role?: string) {

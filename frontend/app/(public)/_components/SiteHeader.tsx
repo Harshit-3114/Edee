@@ -1,5 +1,8 @@
+'use client';
+
 import Link from 'next/link';
 import Image from 'next/image';
+import { usePathname } from 'next/navigation';
 import LinkButton from '@/components/ui/LinkButton';
 
 const LINKS = [
@@ -11,11 +14,31 @@ const LINKS = [
 
 /** Shared header for every public page: same links, same order, everywhere. */
 export default function SiteHeader() {
+  const pathname = usePathname();
+
+  function desktopClass(href: string) {
+    const active = pathname === href || pathname.startsWith(`${href}/`);
+    return `text-sm transition-colors duration-200 hover:scale-105 ${
+      active ? 'font-semibold text-white underline underline-offset-8 decoration-2' : 'text-white/75 hover:text-white'
+    }`;
+  }
+
+  function mobileClass(href: string) {
+    const active = pathname === href || pathname.startsWith(`${href}/`);
+    return `shrink-0 text-sm transition-colors duration-200 ${
+      active ? 'font-semibold text-white underline underline-offset-8 decoration-2' : 'text-white/75 hover:text-white'
+    }`;
+  }
+
   return (
-    <header className="border-b border-[var(--line)] bg-[var(--surface)]/80 backdrop-blur-sm sticky top-0 z-40 transition-shadow duration-300 hover:shadow-md">
+    <header className="bg-[var(--pine)] sticky top-0 z-40 transition-shadow duration-300 hover:shadow-md relative overflow-hidden">
+      <span
+        aria-hidden="true"
+        className="animate-sheen pointer-events-none absolute inset-y-0 left-0 w-1/4 bg-gradient-to-r from-transparent via-white/20 to-transparent"
+      />
       <nav
         aria-label="Main"
-        className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-6"
+        className="relative mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-6"
       >
         <Link href="/" className="shrink-0 flex items-center gap-2" aria-label="Edee Apply">
           <Image
@@ -23,17 +46,18 @@ export default function SiteHeader() {
             alt=""
             width={32}
             height={32}
-            className="transition-transform duration-300 hover:scale-110"
+            className="rounded-md bg-white/95 p-0.5 transition-transform duration-300 hover:scale-110"
             priority
           />
-          <span className="text-sm font-semibold tracking-tight text-[var(--text-primary)]">Edee Apply</span>
+          <span className="text-sm font-semibold tracking-tight text-white">Edee Apply</span>
         </Link>
         <div className="hidden items-center gap-6 md:flex">
           {LINKS.map((link) => (
             <Link
               key={link.href}
               href={link.href}
-              className="text-sm text-[var(--text-secondary)] transition-colors duration-200 hover:text-[var(--text-primary)] hover:scale-105"
+              aria-current={pathname === link.href ? 'page' : undefined}
+              className={desktopClass(link.href)}
             >
               {link.label}
             </Link>
@@ -49,7 +73,8 @@ export default function SiteHeader() {
             <Link
               key={link.href}
               href={link.href}
-              className="shrink-0 text-sm text-[var(--text-secondary)] transition-colors duration-200 hover:text-[var(--text-primary)]"
+              aria-current={pathname === link.href ? 'page' : undefined}
+              className={mobileClass(link.href)}
             >
               {link.label}
             </Link>

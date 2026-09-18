@@ -21,7 +21,7 @@ import type { CohortStage, CohortStudentDetail } from '@/lib/types';
 
 const STAGE_TONE: Record<CohortStage, Tone> = {
   signed_up: 'neutral',
-  shortlisted: 'info',
+  shortlisted: 'success',
   paid: 'warning',
   accepted: 'success',
 };

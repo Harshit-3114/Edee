@@ -18,6 +18,7 @@ import logging
 from app.db.connection import get_db
 from app.middleware.auth import current_college_id, require_roles
 from app.models.college import clean_gallery, dump_gallery, parse_gallery
+from app.services.notify import notify
 
 router = APIRouter()
 
@@ -388,6 +389,35 @@ async def update_application(
             "entity": application_id,
         },
     )
+    student = await db.execute(
+        text(
+            """
+            SELECT s.firebase_uid, c.name AS college_name, cc.course_name
+            FROM applications a
+            JOIN students s ON s.id = a.student_id
+            JOIN colleges c ON c.id = a.college_id
+            JOIN college_courses cc ON cc.id = a.course_id
+            WHERE a.id = :aid
+            """
+        ),
+        {"aid": application_id},
+    )
+    info = student.fetchone()
+    if info is not None:
+        headline = {
+            "accepted": "Accepted",
+            "rejected": "Not selected",
+            "under_review": "Under review",
+        }[body.status]
+        await notify(
+            db,
+            info.firebase_uid,
+            "student",
+            "application_status",
+            f"{headline}: {info.course_name} at {info.college_name}",
+            body.status_note,
+            "/student/dashboard",
+        )
     await db.commit()
     logger.info(
         "application status changed id=%s from=%s to=%s",

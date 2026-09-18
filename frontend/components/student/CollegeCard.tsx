@@ -2,7 +2,6 @@
 
 import Link from 'next/link';
 import { ArrowSquareOut, MapPin } from '@phosphor-icons/react';
-import Badge from '@/components/ui/Badge';
 import { formatFee } from '@/lib/format';
 import type { College } from '@/lib/types';
 import ShortlistButton from './ShortlistButton';
@@ -14,12 +13,6 @@ interface Props {
   onToggle: (collegeId: string, courseId: string) => void;
 }
 
-const TYPE_LABEL: Record<College['type'], string> = {
-  government: 'Government',
-  private: 'Private',
-  deemed: 'Deemed',
-};
-
 export default function CollegeCard({
   college,
   isShortlisted,
@@ -29,8 +22,8 @@ export default function CollegeCard({
   const courses = college.courses.filter((course) => course.active);
 
   return (
-    <article className="rounded-lg border border-[var(--line)] bg-[var(--surface-raised)] p-5 transition-shadow duration-200 hover:shadow-[var(--shadow-md)]">
-      <header className="flex flex-wrap items-start justify-between gap-3">
+    <article className="rounded-xl border border-[var(--line)] bg-[var(--surface-raised)] p-5 transition-shadow duration-200 hover:shadow-[var(--shadow-sm)]">
+      <header>
         <div className="min-w-0">
           <h3 className="text-base font-semibold tracking-tight">{college.name}</h3>
           <p className="mt-1 flex items-center gap-1.5 text-[13px] text-[var(--text-secondary)]">
@@ -38,7 +31,6 @@ export default function CollegeCard({
             {college.city}, {college.state}
           </p>
         </div>
-        <Badge>{TYPE_LABEL[college.type]}</Badge>
       </header>
 
       {college.slug && (
@@ -62,7 +54,7 @@ export default function CollegeCard({
           {courses.map((course) => (
             <li
               key={course.id}
-              className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-[var(--surface-sunken)] px-3.5 py-3"
+              className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[var(--line)] bg-white px-3.5 py-3"
             >
               <div className="min-w-0">
                 <p className="text-sm font-medium">{course.course_name}</p>

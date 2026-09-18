@@ -18,6 +18,11 @@ class Settings(BaseSettings):
     # boot with it set to 1.
     DEV_MODE: Optional[bool] = None
 
+    # SQL echo prints every statement with its parameters. Off by default:
+    # the per-request log line already shows method, path, and latency.
+    # Set SQL_ECHO=1 only when debugging a specific query.
+    SQL_ECHO: bool = False
+
     # Comma-separated. Never "*": this API sends credentials, and a wildcard
     # origin with credentials is how a signed-in student's data gets read by
     # any site they happen to visit.
@@ -54,5 +59,5 @@ class Settings(BaseSettings):
 settings = Settings()
 
 # SQL echo prints every statement with its parameters - names, emails, phone
-# numbers. Fine on a laptop, a data leak once logs are shipped anywhere.
-SQL_ECHO = not settings.is_production and settings.ENVIRONMENT.lower() == "development"
+# numbers. Off unless SQL_ECHO=1: a data leak once logs are shipped anywhere.
+SQL_ECHO = settings.SQL_ECHO and not settings.is_production

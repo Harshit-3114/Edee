@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from app.db.connection import get_db
 from app.middleware.auth import require_roles
+from app.services.notify import notify
 from app.models.payment import (
     CreateOrder,
     CreateOrderResponse,
@@ -474,6 +475,52 @@ async def razorpay_webhook(
         ),
         {"id": uuid.uuid4(), "actor": order.student_id, "entity": order.id},
     )
+
+    # Tell every college in this order, plus the student who paid. A college
+    # with no admin row yet simply gets no notification; the inbox is still
+    # correct when someone signs up later.
+    seen_colleges = {row.college_id for row in rows}
+    for college_id in seen_colleges:
+        names = await db.execute(
+            text(
+                """
+                SELECT c.name AS college_name,
+                       ca.firebase_uid AS admin_uid
+                FROM colleges c
+                LEFT JOIN college_admins ca ON ca.college_id = c.id
+                WHERE c.id = :cid
+                """
+            ),
+            {"cid": college_id},
+        )
+        for name in names.fetchall():
+            if name.admin_uid is None:
+                continue
+            await notify(
+                db,
+                name.admin_uid,
+                "college",
+                "new_application",
+                f"New paid application for {name.college_name}",
+                "A student paid the application fee. Review it in your inbox.",
+                "/college/applications",
+            )
+    student_uid = await db.execute(
+        text("SELECT firebase_uid FROM students WHERE id = :sid"),
+        {"sid": order.student_id},
+    )
+    uid_row = student_uid.fetchone()
+    if uid_row is not None:
+        await notify(
+            db,
+            uid_row.firebase_uid,
+            "student",
+            "payment_received",
+            f"Payment received: {len(rows)} application"
+            f"{'s' if len(rows) != 1 else ''} filed",
+            "Track each one from your dashboard.",
+            "/student/dashboard?paid=1",
+        )
 
     await db.commit()
     logger.info(

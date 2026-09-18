@@ -1,5 +1,6 @@
 'use client';
 
+import { FunnelSimple } from '@phosphor-icons/react';
 import { Select } from '@/components/ui/Input';
 import Button from '@/components/ui/Button';
 import type { CollegeQuery, CollegeType, Stream } from '@/lib/types';
@@ -23,6 +24,12 @@ interface Props {
   onChange: (next: CollegeQuery) => void;
 }
 
+const STREAMS: { value: Stream | ''; label: string }[] = [
+  { value: '', label: 'All levels' },
+  { value: 'UG', label: 'UG' },
+  { value: 'PG', label: 'PG' },
+];
+
 export default function CollegeFilters({ value, onChange }: Props) {
   const active = Boolean(value.stream || value.state || value.type);
 
@@ -31,62 +38,81 @@ export default function CollegeFilters({ value, onChange }: Props) {
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <label htmlFor="filter-stream" className="sr-only">
-        Filter by stream
-      </label>
-      <Select
-        id="filter-stream"
-        value={value.stream ?? ''}
-        onChange={(event) => set('stream', event.target.value as Stream)}
-        className="h-9 w-auto text-[13px]"
-      >
-        <option value="">All streams</option>
-        <option value="UG">Undergraduate</option>
-        <option value="PG">Postgraduate</option>
-      </Select>
+    <div className="rounded-xl border border-[var(--line)] bg-[var(--surface-raised)] p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="inline-flex items-center gap-1.5 px-1 text-[13px] font-medium text-[var(--text-secondary)]">
+          <FunnelSimple size={15} weight="bold" aria-hidden="true" />
+          Filters
+        </span>
 
-      <label htmlFor="filter-state" className="sr-only">
-        Filter by state
-      </label>
-      <Select
-        id="filter-state"
-        value={value.state ?? ''}
-        onChange={(event) => set('state', event.target.value)}
-        className="h-9 w-auto text-[13px]"
-      >
-        <option value="">All states</option>
-        {STATES.map((state) => (
-          <option key={state} value={state}>
-            {state}
-          </option>
-        ))}
-      </Select>
-
-      <label htmlFor="filter-type" className="sr-only">
-        Filter by college type
-      </label>
-      <Select
-        id="filter-type"
-        value={value.type ?? ''}
-        onChange={(event) => set('type', event.target.value as CollegeType)}
-        className="h-9 w-auto text-[13px]"
-      >
-        <option value="">All types</option>
-        <option value="government">Government</option>
-        <option value="private">Private</option>
-        <option value="deemed">Deemed</option>
-      </Select>
-
-      {active && (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => onChange({ search: value.search })}
+        <div
+          role="group"
+          aria-label="Filter by level"
+          className="inline-flex rounded-lg border border-[var(--line)] bg-[var(--surface)] p-0.5"
         >
-          Clear filters
-        </Button>
-      )}
+          {STREAMS.map((option) => {
+            const selected = (value.stream ?? '') === option.value;
+            return (
+              <button
+                key={option.label}
+                type="button"
+                aria-pressed={selected}
+                onClick={() => set('stream', option.value)}
+                className={`rounded-md px-3 py-1.5 text-[13px] font-medium transition-colors ${
+                  selected
+                    ? 'bg-[var(--accent)] text-white shadow-sm'
+                    : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
+                }`}
+              >
+                {option.label}
+              </button>
+            );
+          })}
+        </div>
+
+        <label htmlFor="filter-state" className="sr-only">
+          Filter by state
+        </label>
+        <Select
+          id="filter-state"
+          value={value.state ?? ''}
+          onChange={(event) => set('state', event.target.value)}
+          className="h-9 w-auto text-[13px]"
+        >
+          <option value="">All states</option>
+          {STATES.map((state) => (
+            <option key={state} value={state}>
+              {state}
+            </option>
+          ))}
+        </Select>
+
+        <label htmlFor="filter-type" className="sr-only">
+          Filter by college type
+        </label>
+        <Select
+          id="filter-type"
+          value={value.type ?? ''}
+          onChange={(event) => set('type', event.target.value as CollegeType)}
+          className="h-9 w-auto text-[13px]"
+        >
+          <option value="">All types</option>
+          <option value="government">Government</option>
+          <option value="private">Private</option>
+          <option value="deemed">Deemed</option>
+        </Select>
+
+        {active && (
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => onChange({ search: value.search })}
+            className="ml-auto"
+          >
+            Clear filters
+          </Button>
+        )}
+      </div>
     </div>
   );
 }

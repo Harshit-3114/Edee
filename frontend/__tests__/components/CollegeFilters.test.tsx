@@ -8,10 +8,7 @@ describe('CollegeFilters', () => {
     const onChange = vi.fn();
     render(<CollegeFilters value={{}} onChange={onChange} />);
 
-    await userEvent.selectOptions(
-      screen.getByLabelText('Filter by stream'),
-      'PG',
-    );
+    await userEvent.click(screen.getByRole('button', { name: 'PG' }));
     expect(onChange).toHaveBeenCalledWith({ stream: 'PG' });
   });
 
@@ -19,7 +16,7 @@ describe('CollegeFilters', () => {
     const onChange = vi.fn();
     render(<CollegeFilters value={{ stream: 'UG' }} onChange={onChange} />);
 
-    await userEvent.selectOptions(screen.getByLabelText('Filter by stream'), '');
+    await userEvent.click(screen.getByRole('button', { name: 'All levels' }));
     // An empty string would be sent as a query param and match nothing.
     expect(onChange).toHaveBeenCalledWith({ stream: undefined });
   });

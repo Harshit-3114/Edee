@@ -7,15 +7,17 @@
   nav and the content, never from a different accent colour - a student and an
   admin should feel they are in the same product, one floor apart.
 
-  Shape rule, applied everywhere:
-    buttons, inputs, cards, tables .......... --radius  (8px)
-    badges and avatars ...................... full pill
+  Shape rule, applied everywhere (DESIGN.md §4):
+    buttons, inputs, tabs .................. 8px  (rounded-lg)
+    cards, tables, modals .................. 12px (rounded-xl)
+    badges, avatars, counters .............. full pill
   Nothing else. No mixed corner scales.
 */
 
 @theme {
-  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
+  --font-sans: "Mulish", sans-serif;
+  --font-serif: "Poppins", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace;
 
   --radius: 0.5rem;
 
@@ -27,13 +29,13 @@
 }
 
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
 
   /* Surfaces */
-  --surface: #fbfbfa;
+  --surface: #ffffff;
   --surface-raised: #ffffff;
-  --surface-sunken: #f3f3f1;
-  --surface-hover: #f0f0ee;
+  --surface-sunken: #ffffff;
+  --surface-hover: #ffffff;
 
   /* Text */
   --text-primary: #18181b;
@@ -48,20 +50,29 @@
   /* Accent - locked for the whole product */
   --accent: #047857;
   --accent-hover: #065f46;
-  --accent-subtle: #ecfdf5;
+  --accent-pressed: #064e3b;
+  --pine: #0b3d2e;
+  --accent-subtle: #c6e9d4;
   --accent-line: #a7f3d0;
   --accent-text: #065f46;
 
   /* Status */
+  --success: #047857;
+  --success-subtle: #c6e9d4;
+  --success-line: #a7f3d0;
+  --action: #c2410c;
+  --action-subtle: #f7cfa1;
+  --action-line: #fed7aa;
+  --action-solid: #9a3412;
+  --brass: #8c6a3c;
+  --brass-subtle: #eedcab;
   --danger: #b91c1c;
-  --danger-subtle: #fef2f2;
+  --danger-subtle: #f5c8c8;
   --danger-line: #fecaca;
-  --warning: #a16207;
-  --warning-subtle: #fefce8;
+  --warning: #b45309;
+  --warning-subtle: #f9e2a8;
   --warning-line: #fde68a;
-  --info: #1d4ed8;
-  --info-subtle: #eff6ff;
-  --info-line: #bfdbfe;
+  --warning-solid: #92400e;
 
   --focus-ring: #047857;
 
@@ -72,45 +83,51 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    /* Dark mode palette per spec */
-    --surface: #121212;           /* Page background */
-    --surface-raised: #1E1E1E;    /* Cards, panels */
-    --surface-sunken: #121212;    /* Sunken areas */
-    --surface-hover: #1E1E1E;     /* Hover on surfaces */
+    /* Light-locked: dark preference still renders the emerald light theme. */
+    color-scheme: light;
 
-    --text-primary: #F5F5F5;      /* Body copy, headings */
-    --text-secondary: #A3A3A3;    /* Muted/secondary text */
-    --text-muted: #A3A3A3;
-    --text-inverse: #121212;      /* Text on accent */
+    --surface: #ffffff;
+    --surface-raised: #ffffff;
+    --surface-sunken: #ffffff;
+    --surface-hover: #ffffff;
 
-    --line: #333333;              /* Dividers, input borders */
-    --line-strong: #333333;
+    --text-primary: #18181b;
+    --text-secondary: #52525b;
+    --text-muted: #71717a;
+    --text-inverse: #fafafa;
 
-    /* Primary (maroon) */
-    --accent: #D9475C;
-    --accent-hover: #E8677A;
-    /* Secondary / gold accent */
-    --accent-secondary: #F2BB5D;
-    --accent-secondary-hover: #F7CD7E;
-    --accent-subtle: #F2BB5D;     /* Light gold for subtle backgrounds */
-    --accent-line: #F2BB5D;
-    --accent-text: #F2BB5D;
+    --line: #e4e4e7;
+    --line-strong: #d4d4d8;
 
-    /* Status colors */
-    --success: #4CAF7D;
-    --success-subtle: #4CAF7D33;
-    --success-line: #4CAF7D;
-    --warning: #F2BB5D;
-    --warning-subtle: #F2BB5D33;
-    --warning-line: #F2BB5D;
-    --danger: #E57373;
-    --danger-subtle: #E5737333;
-    --danger-line: #E57373;
+    --accent: #047857;
+    --accent-hover: #34d399;
+    --accent-pressed: #10b981;
+    --pine: #0b3d2e;
+    --accent-subtle: #c6e9d4;
+    --accent-line: #a7f3d0;
+    --accent-text: #065f46;
 
-    --focus-ring: #D9475C;
+    --success: #047857;
+    --success-subtle: #c6e9d4;
+    --success-line: #a7f3d0;
+    --action: #c2410c;
+    --action-subtle: #f7cfa1;
+    --action-line: #fed7aa;
+    --action-solid: #9a3412;
+    --brass: #8c6a3c;
+    --brass-subtle: #eedcab;
+    --danger: #b91c1c;
+    --danger-subtle: #f5c8c8;
+    --danger-line: #fecaca;
+    --warning: #b45309;
+    --warning-subtle: #f9e2a8;
+    --warning-line: #fde68a;
+    --warning-solid: #92400e;
 
-    --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
-    --shadow-md: 0 4px 16px -4px rgb(0 0 0 / 0.55);
+    --focus-ring: #047857;
+
+    --shadow-sm: 0 1px 2px rgb(24 24 27 / 0.06);
+    --shadow-md: 0 4px 16px -4px rgb(24 24 27 / 0.1);
   }
 }
 
@@ -158,10 +175,9 @@
   }
 
   .btn {
-    transition: background-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease, transform 0.15s cubic-bezier(0.16,1,0.3,1);
+    transition: background-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
   }
   .btn:hover {
-    transform: translateY(-2px) scale(1.02);
     box-shadow: var(--shadow-md);
   }
   .btn:active {
@@ -169,11 +185,10 @@
   }
 
   .card {
-    transition: box-shadow 0.3s ease, transform 0.2s ease, border-color 0.2s ease;
+    transition: box-shadow 0.2s ease, border-color 0.2s ease;
   }
   .card:hover {
-    box-shadow: var(--shadow-md);
-    transform: translateY(-6px) scale(1.01);
+    box-shadow: var(--shadow-sm);
     border-color: var(--line-strong);
   }
 
@@ -182,26 +197,6 @@
   }
   .link-hover:hover {
     color: var(--text-primary);
-  }
-
-  .scale-hover {
-    @apply transition-transform duration-300;
-  }
-  .scale-hover:hover {
-    transform: scale(1.05);
-  }
-
-  .vignette {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    background: radial-gradient(ellipse at center, transparent 60%, rgba(0,0,0,0.35) 100%);
-    z-index: 1;
-  }
-
-  .hero-content {
-    position: relative;
-    z-index: 2;
   }
 
   /* Entrance animations */
@@ -255,8 +250,25 @@
 }
 
 @media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+
   .rise {
     animation: rise 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  /* Slow sheen sweep for the translucent site header. */
+  @keyframes sheen {
+    from {
+      transform: translateX(-120%) skewX(-12deg);
+    }
+    to {
+      transform: translateX(420%) skewX(-12deg);
+    }
+  }
+  .animate-sheen {
+    animation: sheen 8s ease-in-out infinite;
   }
 
   /* Scroll reveals share the mount keyframes. The hidden base matches the
@@ -268,6 +280,15 @@
 
   .reveal.is-visible {
     animation: rise 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  /* Pop-in children: hidden until the parent Reveal fires, then springy. */
+  .reveal .pop {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  .reveal.is-visible .pop {
+    animation: scale-in 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both;
   }
 }
 

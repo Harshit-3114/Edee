@@ -1,4 +1,4 @@
-import Badge from '@/components/ui/Badge';
+import Badge, { type Tone } from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
 import {
   APPLICATION_STATUS_LABEL,
@@ -7,6 +7,15 @@ import {
   formatFee,
 } from '@/lib/format';
 import type { Application } from '@/lib/types';
+
+/** Left-edge stripe mirrors the status pill so state reads at a glance. */
+const TONE_EDGE: Record<Tone, string> = {
+  neutral: 'border-l-[var(--line-strong)]',
+  success: 'border-l-[var(--success)]',
+  warning: 'border-l-[var(--warning-solid)]',
+  action: 'border-l-[var(--action-solid)]',
+  danger: 'border-l-[var(--danger)]',
+};
 
 /** A student may withdraw only while a college has not yet decided. */
 function canWithdraw(status: Application['status']): boolean {
@@ -22,8 +31,11 @@ export default function ApplicationStatusCard({
   onWithdraw?: (id: string) => void;
   withdrawing?: boolean;
 }) {
+  const tone = APPLICATION_STATUS_TONE[application.status];
   return (
-    <article className="rounded-lg border border-[var(--line)] bg-[var(--surface-raised)] p-5 transition-shadow duration-200 hover:shadow-[var(--shadow-md)]">
+    <article
+      className={`rounded-xl border border-[var(--line)] border-l-4 bg-[var(--surface-raised)] p-5 transition-shadow duration-200 hover:shadow-[var(--shadow-sm)] ${TONE_EDGE[tone]}`}
+    >
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="text-base font-medium tracking-tight">

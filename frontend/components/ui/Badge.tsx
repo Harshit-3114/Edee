@@ -1,14 +1,12 @@
-export type Tone = 'neutral' | 'info' | 'success' | 'warning' | 'danger';
+export type Tone = 'neutral' | 'success' | 'warning' | 'action' | 'danger';
 
+/** Status pills are vivid solids: white text on full-strength color. */
 const TONES: Record<Tone, string> = {
-  neutral:
-    'bg-[var(--surface-sunken)] text-[var(--text-secondary)] border-[var(--line-strong)]',
-  info: 'bg-[var(--info-subtle)] text-[var(--info)] border-[var(--info-line)]',
-  success:
-    'bg-[var(--accent-subtle)] text-[var(--accent-text)] border-[var(--accent-line)]',
-  warning:
-    'bg-[var(--warning-subtle)] text-[var(--warning)] border-[var(--warning-line)]',
-  danger: 'bg-[var(--danger-subtle)] text-[var(--danger)] border-[var(--danger-line)]',
+  neutral: 'bg-[var(--text-secondary)] text-white border-transparent',
+  success: 'bg-[var(--success)] text-white border-transparent',
+  warning: 'bg-[var(--warning-solid)] text-white border-transparent',
+  action: 'bg-[var(--action-solid)] text-white border-transparent',
+  danger: 'bg-[var(--danger)] text-white border-transparent',
 };
 
 /** Badges are the one pill-shaped thing in the product. Everything else is 8px. */

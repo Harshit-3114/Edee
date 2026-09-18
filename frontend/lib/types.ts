@@ -209,6 +209,17 @@ export interface AuditEvent {
   created_at: string;
 }
 
+export interface Notification {
+  id: string;
+  role: string;
+  type: string;
+  title: string;
+  body: string | null;
+  link: string | null;
+  read_at: string | null;
+  created_at: string;
+}
+
 /* Detail views */
 
 export interface CollegeApplicationDetail {

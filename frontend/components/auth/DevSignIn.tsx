@@ -25,35 +25,57 @@ interface Directory {
 }
 
 /**
- * Developer quick sign-in. Shown only when the backend runs in dev mode (or
- * the frontend forces it): it mints a local dev: token for the picked role,
- * no Firebase involved. Hidden everywhere else — in production this
- * component renders nothing at all.
+ * Whether the dev bypass replaces the real sign-in forms. True when the
+ * backend runs in dev mode (or Firebase was never configured): phone OTP
+ * and Google would only print "not configured" errors there.
  */
-export default function DevSignIn() {
-  const router = useRouter();
-  const params = useSearchParams();
-  const [visible, setVisible] = useState<boolean | null>(null);
-  const [directory, setDirectory] = useState<Directory | null>(null);
-  const [role, setRole] = useState<Role>('student');
-  const [label, setLabel] = useState('');
-  const [orgId, setOrgId] = useState('');
-  const [error, setError] = useState('');
-  const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    const picked = params.get('portal');
-    if (isRole(picked)) setRole(picked);
-  }, [params]);
+export function useDevBypass(): boolean | null {
+  const [dev, setDev] = useState<boolean | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const dev =
+      const value =
         isDevModeForced() || !isFirebaseConfigured() || (await fetchBackendDevMode());
-      if (cancelled) return;
-      setVisible(dev);
-      if (!dev) return;
+      if (!cancelled) setDev(value);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return dev;
+}
+
+/**
+ * Developer quick sign-in. Rendered INSTEAD of the phone/Google forms when
+ * the backend runs in dev mode: it mints a local dev: token for the portal
+ * role picked above, no Firebase involved. Hidden everywhere else — in
+ * production this component renders nothing at all.
+ */
+export default function DevSignIn() {
+  const router = useRouter();
+  const params = useSearchParams();
+  const [directory, setDirectory] = useState<Directory | null>(null);
+  const [orgId, setOrgId] = useState('');
+  const [label, setLabel] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  // The role comes from the shared portal picker above (?portal=). There is
+  // deliberately no second picker here: one choice, one button.
+  const picked = params.get('portal');
+  const role: Role = isRole(picked) ? picked : 'student';
+
+  const needsOrg = role === 'college' || role === 'coaching';
+  const orgOptions =
+    role === 'college'
+      ? (directory?.colleges ?? []).map((c) => ({ id: c.id, name: `${c.name} (${c.slug})` }))
+      : (directory?.coaching_centres ?? []).map((c) => ({ id: c.id, name: c.name }));
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
       // Organisation picker for staff roles. Fails silently on purpose: a
       // typed UUID or college slug below always works without it.
       try {
@@ -67,14 +89,6 @@ export default function DevSignIn() {
       cancelled = true;
     };
   }, []);
-
-  if (!visible) return null;
-
-  const needsOrg = role === 'college' || role === 'coaching';
-  const orgOptions =
-    role === 'college'
-      ? (directory?.colleges ?? []).map((c) => ({ id: c.id, name: `${c.name} (${c.slug})` }))
-      : (directory?.coaching_centres ?? []).map((c) => ({ id: c.id, name: c.name }));
 
   async function resolveOrg(input: string): Promise<string | null> {
     const value = input.trim();
@@ -136,39 +150,7 @@ export default function DevSignIn() {
   }
 
   return (
-    <section
-      aria-label="Developer sign-in"
-      className="rounded-lg border border-dashed border-[var(--line-strong)] p-4"
-    >
-      <h2 className="text-sm font-medium">Developer quick sign-in</h2>
-      <p className="mt-1 text-[13px] leading-relaxed text-[var(--text-secondary)]">
-        The backend is in dev mode: pick a role and any values work, no Firebase
-        needed. Never enabled in production.
-      </p>
-
-      <form onSubmit={submit} className="mt-4 flex flex-col gap-4" noValidate>
-        <div role="group" aria-label="Dev role" className="grid grid-cols-2 gap-2">
-          {(['student', 'college', 'coaching', 'admin'] as const).map((option) => (
-            <button
-              key={option}
-              type="button"
-              aria-pressed={option === role}
-              onClick={() => {
-                setRole(option);
-                setError('');
-              }}
-              className={[
-                'rounded-lg border px-3 py-2 text-left text-sm font-medium transition-colors duration-150',
-                option === role
-                  ? 'border-[var(--accent-line)] bg-[var(--accent-subtle)]'
-                  : 'border-[var(--line)] bg-[var(--surface-raised)] hover:bg-[var(--surface-hover)]',
-              ].join(' ')}
-            >
-              {PORTAL_LABEL[option]}
-            </button>
-          ))}
-        </div>
-
+    <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
         {needsOrg &&
           (orgOptions.length > 0 ? (
             <Field label={role === 'college' ? 'College' : 'Coaching centre'} required>
@@ -227,6 +209,5 @@ export default function DevSignIn() {
           Sign in as {PORTAL_LABEL[role]}
         </Button>
       </form>
-    </section>
   );
 }

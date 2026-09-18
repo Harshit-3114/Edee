@@ -82,7 +82,7 @@ export default function CollegeProfilePage() {
       {!loading && profile && (
         <form
           onSubmit={submit}
-          className="flex max-w-md flex-col gap-5 rounded-lg border border-[var(--line)] bg-[var(--surface-raised)] p-5"
+          className="flex max-w-3xl flex-col gap-5 rounded-xl border border-[var(--line)] bg-[var(--surface-raised)] p-5 md:p-8"
           noValidate
         >
           <Field label="College name" hint="Contact the platform team to change this.">
@@ -102,31 +102,33 @@ export default function CollegeProfilePage() {
             )}
           </Field>
 
-          <Field label="City" required>
-            {(fieldProps) => (
-              <Input
-                {...fieldProps}
-                value={profile.city}
-                onChange={(event) => {
-                  setProfile({ ...profile, city: event.target.value });
-                  setSubmitted(false);
-                }}
-              />
-            )}
-          </Field>
+          <div className="grid gap-5 sm:grid-cols-2">
+            <Field label="City" required>
+              {(fieldProps) => (
+                <Input
+                  {...fieldProps}
+                  value={profile.city}
+                  onChange={(event) => {
+                    setProfile({ ...profile, city: event.target.value });
+                    setSubmitted(false);
+                  }}
+                />
+              )}
+            </Field>
 
-          <Field label="State" required>
-            {(fieldProps) => (
-              <Input
-                {...fieldProps}
-                value={profile.state}
-                onChange={(event) => {
-                  setProfile({ ...profile, state: event.target.value });
-                  setSubmitted(false);
-                }}
-              />
-            )}
-          </Field>
+            <Field label="State" required>
+              {(fieldProps) => (
+                <Input
+                  {...fieldProps}
+                  value={profile.state}
+                  onChange={(event) => {
+                    setProfile({ ...profile, state: event.target.value });
+                    setSubmitted(false);
+                  }}
+                />
+              )}
+            </Field>
+          </div>
 
           <Field
             label="Landing page hero image"

@@ -4,7 +4,6 @@ import { useCallback, useEffect, useState } from 'react';
 import { Tray } from '@phosphor-icons/react';
 import PageHeader from '@/components/shells/PageHeader';
 import ApplicantTable from '@/components/college/ApplicantTable';
-import { Select } from '@/components/ui/Input';
 import { EmptyState, ErrorState, LoadingList } from '@/components/ui/States';
 import api, { apiErrorMessage } from '@/lib/api';
 import { APPLICATION_STATUS_LABEL } from '@/lib/format';
@@ -50,22 +49,30 @@ export default function CollegeApplicationsPage() {
         description="Applicants appear here once their fee is paid. Moving an application to accepted or rejected is final."
       />
 
-      <div className="mb-5">
-        <label htmlFor="filter-status" className="sr-only">
-          Filter by status
-        </label>
-        <Select
-          id="filter-status"
-          value={status}
-          onChange={(event) => setStatus(event.target.value as ApplicationStatus | '')}
-          className="h-9 w-auto text-[13px]"
-        >
-          {FILTERS.map((value) => (
-            <option key={value || 'all'} value={value}>
-              {value ? APPLICATION_STATUS_LABEL[value] : 'All applications'}
-            </option>
-          ))}
-        </Select>
+      <div
+        role="tablist"
+        aria-label="Filter by status"
+        className="mb-5 inline-flex max-w-full gap-0.5 overflow-x-auto rounded-lg border border-[var(--line)] bg-[var(--surface)] p-0.5"
+      >
+        {FILTERS.map((value) => {
+          const selected = status === value;
+          return (
+            <button
+              key={value || 'all'}
+              type="button"
+              role="tab"
+              aria-selected={selected}
+              onClick={() => setStatus(value)}
+              className={`rounded-md px-3 py-1.5 text-[13px] font-medium whitespace-nowrap transition-colors ${
+                selected
+                  ? 'bg-[var(--accent)] text-white shadow-sm'
+                  : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
+              }`}
+            >
+              {value ? APPLICATION_STATUS_LABEL[value] : 'All'}
+            </button>
+          );
+        })}
       </div>
 
       {loading && <LoadingList rows={5} columns={5} />}

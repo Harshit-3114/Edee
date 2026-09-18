@@ -65,6 +65,11 @@ async def list_colleges(
 
     where = " AND ".join(conditions)
 
+    # Stream is a course-level filter: the page CTE above already restricts
+    # which colleges match, but the nested course list must be restricted too,
+    # otherwise a PG filter still shows a college's UG courses.
+    course_stream = "AND cc.stream = :stream" if stream else ""
+
     # Paginate over colleges, not over the college-course join: with LIMIT on
     # the joined rows a college offering 20 courses fills the page by itself.
     result = await db.execute(
@@ -107,7 +112,7 @@ async def list_colleges(
             FROM page
             JOIN colleges c ON c.id = page.id
             LEFT JOIN college_courses cc
-                   ON cc.college_id = c.id AND cc.active = true
+                   ON cc.college_id = c.id AND cc.active = true {course_stream}
             GROUP BY c.id, c.name, c.slug, c.location, c.city, c.state, c.type, c.active
             ORDER BY c.name
             """

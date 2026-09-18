@@ -43,9 +43,14 @@ export default function CoachingDashboardPage() {
         title={summary?.centre_name ?? 'Overview'}
         description="How far your students have got. Each number counts students, not applications."
         action={
-          <LinkButton href="/coaching/students" variant="secondary" size="sm">
-            View cohort
-          </LinkButton>
+          <div className="flex flex-wrap gap-2">
+            <LinkButton href="/coaching/invite" variant="secondary" size="sm">
+              Invite codes
+            </LinkButton>
+            <LinkButton href="/coaching/students" variant="secondary" size="sm">
+              View cohort
+            </LinkButton>
+          </div>
         }
       />
 

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import Button from '@/components/ui/Button';
 import Field from '@/components/ui/Field';
 import { Input, Select } from '@/components/ui/Input';
@@ -81,8 +82,22 @@ export default function SignupClient() {
   }
 
   return (
-    <main id="main" className="mx-auto flex min-h-[100dvh] max-w-md flex-col justify-center px-6 py-12">
-      <h1 className="text-2xl font-semibold tracking-tight">Complete your profile</h1>
+    <main id="main" className="relative flex min-h-[100dvh] items-center justify-center px-4 py-12 sm:px-6">
+      <Image
+        src="/campuses/loyola.jpg"
+        alt=""
+        aria-hidden="true"
+        fill
+        priority
+        sizes="100vw"
+        className="object-cover"
+      />
+      <div
+        aria-hidden="true"
+        className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/55 to-black/70"
+      />
+      <div className="rise relative w-full max-w-xl rounded-xl border border-white/20 bg-[var(--surface-raised)] p-6 shadow-[var(--shadow-md)] sm:p-10">
+        <h1 className="font-serif text-3xl font-semibold tracking-tight md:text-4xl">Complete your profile</h1>
       <p className="mt-2 text-sm leading-relaxed text-[var(--text-secondary)]">
         Colleges see this information on every application you send.
       </p>
@@ -173,6 +188,7 @@ export default function SignupClient() {
           Create profile
         </Button>
       </form>
+      </div>
     </main>
   );
 }

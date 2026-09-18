@@ -1,14 +1,16 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { CheckCircle, FileText } from '@phosphor-icons/react';
 import PageHeader from '@/components/shells/PageHeader';
 import ApplicationStatusCard from '@/components/student/ApplicationStatusCard';
 import LinkButton from '@/components/ui/LinkButton';
+import StatTile, { StatRow } from '@/components/ui/StatTile';
 import { CardSkeleton, EmptyState, ErrorState } from '@/components/ui/States';
 import api, { apiErrorMessage } from '@/lib/api';
-import type { Application } from '@/lib/types';
+import { APPLICATION_STATUS_LABEL } from '@/lib/format';
+import type { Application, ApplicationStatus } from '@/lib/types';
 
 export default function StudentDashboardPage() {
   const params = useSearchParams();
@@ -50,6 +52,18 @@ export default function StudentDashboardPage() {
     },
     [load],
   );
+
+  const counts = useMemo(() => {
+    const tally: Record<ApplicationStatus, number> = {
+      payment_received: 0,
+      under_review: 0,
+      accepted: 0,
+      rejected: 0,
+      withdrawn: 0,
+    };
+    for (const application of applications) tally[application.status] += 1;
+    return tally;
+  }, [applications]);
 
   return (
     <>
@@ -99,6 +113,29 @@ export default function StudentDashboardPage() {
             <LinkButton href="/student/colleges">Find colleges</LinkButton>
           }
         />
+      )}
+
+      {!loading && !error && applications.length > 0 && (
+        <div className="mb-5">
+          <StatRow>
+            <StatTile
+              label={APPLICATION_STATUS_LABEL.payment_received}
+              value={String(counts.payment_received)}
+            />
+            <StatTile
+              label={APPLICATION_STATUS_LABEL.under_review}
+              value={String(counts.under_review)}
+            />
+            <StatTile
+              label={APPLICATION_STATUS_LABEL.accepted}
+              value={String(counts.accepted)}
+            />
+            <StatTile
+              label={APPLICATION_STATUS_LABEL.rejected}
+              value={String(counts.rejected)}
+            />
+          </StatRow>
+        </div>
       )}
 
       {!loading && !error && applications.length > 0 && (

@@ -16,11 +16,11 @@ const LEGAL_LINKS = [
 /** Shared footer for every public page. */
 export default function SiteFooter() {
   return (
-    <footer className="border-t border-[var(--line)]">
+    <footer className="bg-[var(--pine)] text-white">
       <div className="mx-auto flex max-w-6xl flex-col gap-6 px-6 py-10 md:flex-row md:items-start md:justify-between">
         <div>
-          <p className="text-sm font-semibold tracking-tight">Edee Apply</p>
-          <p className="mt-2 max-w-[42ch] text-[13px] leading-relaxed text-[var(--text-muted)]">
+          <p className="text-sm font-semibold tracking-tight text-white">Edee Apply</p>
+          <p className="mt-2 max-w-[42ch] text-[13px] leading-relaxed text-white/65">
             One shortlist, one payment, every college application tracked.
             Application fees are set by each college and are not refundable.
           </p>
@@ -31,7 +31,7 @@ export default function SiteFooter() {
               <Link
                 key={link.href}
                 href={link.href}
-                className="text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
+                className="text-white/70 transition-colors hover:text-white"
               >
                 {link.label}
               </Link>
@@ -42,7 +42,7 @@ export default function SiteFooter() {
               <Link
                 key={link.href}
                 href={link.href}
-                className="text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
+                className="text-white/70 transition-colors hover:text-white"
               >
                 {link.label}
               </Link>

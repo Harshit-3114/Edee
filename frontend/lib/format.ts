@@ -57,9 +57,9 @@ export const APPLICATION_STATUS_LABEL: Record<ApplicationStatus, string> = {
 
 export const APPLICATION_STATUS_TONE: Record<
   ApplicationStatus,
-  'neutral' | 'info' | 'success' | 'danger' | 'warning'
+  'neutral' | 'success' | 'danger' | 'warning' | 'action'
 > = {
-  payment_received: 'info',
+  payment_received: 'success',
   under_review: 'warning',
   accepted: 'success',
   rejected: 'danger',

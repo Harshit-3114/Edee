@@ -30,6 +30,9 @@ serviceAccountKey.json
 # Local overrides
 docker-compose.override.yml
 
+# Stitch / design assets
+stitch-assets/
+
 # Editors / OS
 .vscode/
 .idea/

@@ -102,6 +102,26 @@ class TestColleges:
         assert len((await client.get("/colleges/?search=Fergusson")).json()) == 1
         assert len((await client.get("/colleges/?search=Nowhere")).json()) == 0
 
+    async def test_stream_filter_applies_to_nested_courses(
+        self, client: AsyncClient, a_student, seed_college, db_session
+    ):
+        """A PG filter must not list UG courses inside a matching college."""
+        await db_session.execute(
+            text(
+                """
+                INSERT INTO college_courses
+                    (id, college_id, course_name, stream, duration_years, seats,
+                     application_fee, active)
+                VALUES (:id, :cid, 'M.Sc Statistics', 'PG', 2, 30, 2000, true)
+                """
+            ),
+            {"id": uuid.uuid4(), "cid": seed_college["college_id"]},
+        )
+        await db_session.commit()
+        data = (await client.get("/colleges/?stream=PG")).json()
+        assert len(data) == 1
+        assert [c["course_name"] for c in data[0]["courses"]] == ["M.Sc Statistics"]
+
     async def test_an_unknown_stream_is_rejected_not_ignored(
         self, client: AsyncClient, a_student
     ):

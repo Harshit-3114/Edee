@@ -6,7 +6,7 @@
  */
 export function TableWrap({ children }: { children: React.ReactNode }) {
   return (
-    <div className="overflow-hidden rounded-lg border border-[var(--line)] bg-[var(--surface-raised)]">
+    <div className="overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface-raised)]">
       <div className="overflow-x-auto">{children}</div>
     </div>
   );

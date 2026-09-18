@@ -9,7 +9,7 @@ import { PORTAL_HOME, ROLE_COOKIE, isPublicPath, isRole, roleForPath } from '@/l
  * it is a routing decision, not an authorisation one - the API behind every
  * screen still verifies the Firebase JWT.
  */
-export function middleware(req: NextRequest) {
+export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   if (isPublicPath(pathname)) return NextResponse.next();

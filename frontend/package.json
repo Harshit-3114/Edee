@@ -12,17 +12,14 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@fontsource/mulish": "^5.3.0",
+    "@fontsource/poppins": "^5.3.0",
     "@phosphor-icons/react": "^2.1.7",
-    "@react-three/fiber": "^9.7.0",
-    "@shadergradient/react": "^2.4.20",
     "axios": "^1.7.9",
-    "camera-controls": "^3.1.0",
     "firebase": "^11.1.0",
     "next": "^16.3.5",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "three": "^0.186.0",
-    "three-stdlib": "^2.36.1"
+    "react-dom": "^19.0.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",
@@ -33,7 +30,6 @@
     "@types/node": "^22.10.5",
     "@types/react": "^19.0.7",
     "@types/react-dom": "^19.0.3",
-    "@types/three": "^0.186.0",
     "@vitejs/plugin-react": "^4.3.4",
     "eslint": "^9.18.0",
     "eslint-config-next": "^15.1.6",

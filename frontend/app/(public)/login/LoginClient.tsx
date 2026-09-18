@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import type { User } from 'firebase/auth';
 import {
   Buildings,
@@ -11,7 +12,9 @@ import {
   UsersThree,
 } from '@phosphor-icons/react/dist/ssr';
 import GoogleSignIn from '@/components/auth/GoogleSignIn';
-import DevSignIn from '@/components/auth/DevSignIn';
+import DevSignIn, { useDevBypass } from '@/components/auth/DevSignIn';
+import SiteFooter from '../_components/SiteFooter';
+import SiteHeader from '../_components/SiteHeader';
 import PhoneOTPForm from '@/components/auth/PhoneOTPForm';
 import Button from '@/components/ui/Button';
 import { ErrorState, Skeleton } from '@/components/ui/States';
@@ -51,6 +54,9 @@ function LoginForm() {
   const next = params.get('next');
   const picked = params.get('portal');
   const portal: Role = isRole(picked) ? picked : 'student';
+  // Dev backend (or no Firebase keys): the phone/Google forms below would
+  // only print "not configured" errors, so the dev bypass replaces them.
+  const devBypass = useDevBypass();
 
   function pick(nextPortal: Role) {
     setWrongPortal(null);
@@ -103,8 +109,8 @@ function LoginForm() {
 
   return (
     <>
-      <div role="group" aria-label="Choose your portal" className="grid grid-cols-2 gap-2">
-        {PORTAL_OPTIONS.map(({ role, hint, Icon }) => {
+      <div role="group" aria-label="Choose your portal" className="grid grid-cols-4 gap-2">
+        {PORTAL_OPTIONS.map(({ role, Icon }) => {
           const selected = role === portal;
           return (
             <button
@@ -113,35 +119,44 @@ function LoginForm() {
               aria-pressed={selected}
               onClick={() => pick(role)}
               className={[
-                'flex items-center gap-2.5 rounded-lg border px-3 py-2.5 text-left transition-colors duration-150',
+                'flex flex-col items-center gap-1.5 rounded-xl border px-2 py-3 text-center transition-colors duration-150',
                 selected
                   ? 'border-[var(--accent-line)] bg-[var(--accent-subtle)]'
                   : 'border-[var(--line)] bg-[var(--surface-raised)] hover:bg-[var(--surface-hover)]',
               ].join(' ')}
             >
               <Icon
-                size={20}
+                size={22}
                 aria-hidden="true"
                 className={selected ? 'text-[var(--accent-text)]' : 'text-[var(--text-secondary)]'}
               />
-              <span className="min-w-0">
-                <span className="block text-sm font-medium">{PORTAL_LABEL[role]}</span>
-                <span className="block truncate text-xs text-[var(--text-muted)]">{hint}</span>
-              </span>
+              <span className="text-[13px] font-medium leading-none">{PORTAL_LABEL[role]}</span>
             </button>
           );
         })}
       </div>
 
-      <PhoneOTPForm onSuccess={route} onError={setError} />
+      {devBypass === null ? (
+        <div className="flex flex-col gap-3" role="status" aria-live="polite">
+          <span className="sr-only">Loading sign-in</span>
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full" />
+        </div>
+      ) : devBypass ? (
+        <DevSignIn />
+      ) : (
+        <>
+          <PhoneOTPForm onSuccess={route} onError={setError} />
 
-      <div className="flex items-center gap-3 text-xs text-[var(--text-muted)]">
-        <span className="h-px flex-1 bg-[var(--line)]" />
-        or
-        <span className="h-px flex-1 bg-[var(--line)]" />
-      </div>
+          <div className="flex items-center gap-3 text-xs text-[var(--text-muted)]">
+            <span className="h-px flex-1 bg-[var(--line)]" />
+            or
+            <span className="h-px flex-1 bg-[var(--line)]" />
+          </div>
 
-      <GoogleSignIn onSuccess={route} onError={setError} />
+          <GoogleSignIn onSuccess={route} onError={setError} />
+        </>
+      )}
 
       {error && <ErrorState message={error} />}
       {wrongPortal && (
@@ -155,33 +170,53 @@ function LoginForm() {
 
 export default function LoginClient() {
   return (
-    <main
-      id="main"
-      className="mx-auto flex min-h-[100dvh] max-w-md flex-col justify-center gap-6 px-6 py-12"
-    >
-      <div>
-        <Link href="/" className="text-sm font-semibold tracking-tight">
-          Edee Apply
-        </Link>
-        <h1 className="mt-6 text-2xl font-semibold tracking-tight">Sign in</h1>
-        <Suspense fallback={null}>
-          <PortalHelp />
-        </Suspense>
-      </div>
+    <div className="flex min-h-[100dvh] flex-col">
+      <SiteHeader />
 
-      <Suspense fallback={<Skeleton className="h-24 w-full" />}>
-        <LoginForm />
-      </Suspense>
+      <main id="main" className="relative flex flex-1 items-center justify-center px-4 py-12 sm:px-6">
+        <Image
+          src="/campuses/graduation.jpg"
+          alt=""
+          aria-hidden="true"
+          fill
+          priority
+          sizes="100vw"
+          className="object-cover"
+        />
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/55 to-black/70"
+        />
 
-      <Suspense fallback={null}>
-        <DevSignIn />
-      </Suspense>
+        <div className="rise relative flex w-full max-w-xl flex-col gap-6 rounded-xl border border-white/20 bg-[var(--surface-raised)] p-6 shadow-[var(--shadow-md)] sm:p-10">
+          <div>
+            <Link href="/" className="inline-flex items-center gap-2" aria-label="Edee Apply">
+              <Image src="/logo.png" alt="" width={32} height={32} priority />
+              <span className="text-sm font-semibold tracking-tight text-[var(--text-primary)]">
+                Edee Apply
+              </span>
+            </Link>
+            <h1 className="mt-6 font-serif text-3xl font-semibold tracking-tight md:text-4xl">
+              Sign in
+            </h1>
+            <Suspense fallback={null}>
+              <PortalHelp />
+            </Suspense>
+          </div>
 
-      <p className="text-[13px] leading-relaxed text-[var(--text-muted)]">
-        New here? Signing in with your mobile number creates your student account.
-        College and coaching accounts are created by the platform team.
-      </p>
-    </main>
+          <Suspense fallback={<Skeleton className="h-24 w-full" />}>
+            <LoginForm />
+          </Suspense>
+
+          <p className="text-[13px] leading-relaxed text-[var(--text-muted)]">
+            New here? Signing in with your mobile number creates your student account.
+            College and coaching accounts are created by the platform team.
+          </p>
+        </div>
+      </main>
+
+      <SiteFooter />
+    </div>
   );
 }
 

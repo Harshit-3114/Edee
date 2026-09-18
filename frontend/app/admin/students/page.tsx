@@ -121,7 +121,7 @@ export default function AdminStudentsPage() {
                   <Td>{student.stream}</Td>
                   <Td>
                     {student.coaching_centre_name ? (
-                      <Badge tone="info">{student.coaching_centre_name}</Badge>
+                      <Badge tone="neutral">{student.coaching_centre_name}</Badge>
                     ) : (
                       <span className="text-[13px] text-[var(--text-muted)]">Direct</span>
                     )}

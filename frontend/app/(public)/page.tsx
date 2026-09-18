@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import Image from 'next/image';
 import {
   ArrowRight,
   BookmarkSimple,
@@ -14,7 +15,6 @@ import Reveal from '@/components/ui/Reveal';
 import SiteFooter from './_components/SiteFooter';
 import SiteHeader from './_components/SiteHeader';
 import { FAQS } from './_components/faqs';
-import HeroGradient from '@/components/ui/HeroGradient';
 
 const STEPS = [
   {
@@ -71,18 +71,25 @@ export default function LandingPage() {
       <SiteHeader />
 
       <main id="main">
-        <div className="relative min-h-[80vh] flex items-center">
-          <HeroGradient />
-          <div className="vignette" aria-hidden="true" />
-          <section className="relative z-10 mx-auto grid max-w-6xl items-center gap-10 px-6 pt-16 pb-20 lg:grid-cols-[1.05fr_1fr] lg:pt-24 w-full hero-content">
+        <div className="relative min-h-[80vh] flex items-center overflow-hidden bg-[var(--surface-sunken)]">
+          <Image
+            src="/campuses/graduation.jpg"
+            alt="Graduates celebrating on a historic Indian university quadrangle"
+            fill
+            priority
+            sizes="100vw"
+            className="object-cover"
+          />
+          <div className="absolute inset-0 bg-black/50" aria-hidden="true" />
+          <section className="relative z-10 mx-auto grid max-w-6xl items-center gap-10 px-6 pt-16 pb-20 lg:grid-cols-[1.05fr_1fr] lg:pt-24 w-full">
             <div className="rise">
-              <p className="text-[13px] font-medium tracking-wide text-[var(--accent-text)] uppercase">
+              <p className="text-[13px] font-medium tracking-wide text-white/80 uppercase">
                 UG and PG admissions, in one place
               </p>
-              <h1 className="mt-3 max-w-[15ch] text-4xl leading-[1.08] font-semibold tracking-tight md:text-5xl lg:text-6xl">
+              <h1 className="mt-3 max-w-[15ch] font-serif text-4xl leading-[1.08] font-bold tracking-tight text-white md:text-5xl lg:text-6xl">
                 Apply to every college on one list
               </h1>
-              <p className="mt-5 max-w-[48ch] text-base leading-relaxed text-[var(--text-secondary)]">
+              <p className="mt-5 max-w-[48ch] text-base leading-relaxed text-white/85">
                 Search UG and PG courses across India, shortlist what fits, and pay all your
                 application fees in a single transaction.
               </p>
@@ -146,7 +153,7 @@ export default function LandingPage() {
             <Reveal>
               <h2
                 id="how-it-works-heading"
-                className="text-2xl font-semibold tracking-tight"
+                className="font-serif text-3xl font-semibold tracking-tight md:text-4xl"
               >
                 Three steps, one payment
               </h2>
@@ -170,18 +177,31 @@ export default function LandingPage() {
 
         <section
           aria-labelledby="who-its-for"
-          className="mx-auto max-w-6xl px-6 py-16 lg:py-24"
+          className="relative overflow-hidden"
         >
+          <Image
+            src="/campuses/christ.jpg"
+            alt=""
+            aria-hidden="true"
+            fill
+            sizes="100vw"
+            className="object-cover"
+          />
+          <div
+            aria-hidden="true"
+            className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/60 to-black/70"
+          />
+          <div className="relative mx-auto max-w-6xl px-6 py-16 lg:py-24">
           <div className="grid items-start gap-10 lg:grid-cols-[1fr_1.05fr]">
             <Reveal>
               <div>
                 <h2
                   id="who-its-for"
-                  className="max-w-[18ch] text-2xl font-semibold tracking-tight md:text-3xl"
+                  className="max-w-[18ch] font-serif text-3xl font-semibold tracking-tight text-white md:text-4xl"
                 >
                   Built for students first
                 </h2>
-                <p className="mt-4 max-w-[52ch] text-sm leading-relaxed text-[var(--text-secondary)]">
+                <p className="mt-4 max-w-[52ch] text-sm leading-relaxed text-white/85">
                   One dashboard holds your shortlist, your payments, and every decision a
                   college makes. Withdraw anything undecided, and never pay twice for the
                   same course.
@@ -198,8 +218,8 @@ export default function LandingPage() {
             <div className="flex flex-col gap-4">
               {AUDIENCES.map(({ icon: Icon, title, body }, index) => (
                 <Reveal key={title} delay={index * 90}>
-                  <div className="rounded-lg border border-[var(--line)] bg-[var(--surface-raised)] p-5 card">
-                    <h3 className="flex items-center gap-2 text-base font-medium">
+                  <div className="rounded-xl border border-white/20 bg-white/95 p-5 backdrop-blur-sm">
+                    <h3 className="flex items-center gap-2 text-base font-medium text-[var(--text-primary)]">
                       <Icon size={18} className="text-[var(--accent-text)]" aria-hidden="true" />
                       {title}
                     </h3>
@@ -211,16 +231,16 @@ export default function LandingPage() {
               ))}
             </div>
           </div>
+          </div>
         </section>
 
         <section
           aria-labelledby="faq"
-          className="border-t border-[var(--line)] bg-[var(--surface-sunken)]"
         >
           <div className="mx-auto max-w-3xl px-6 py-16 lg:py-20">
             <Reveal>
-              <h2 id="faq" className="text-2xl font-semibold tracking-tight">
-                Questions, answered
+              <h2 id="faq" className="font-serif text-3xl font-semibold tracking-tight md:text-4xl">
+                FAQs
               </h2>
             </Reveal>
             <div className="mt-8 flex flex-col gap-3">

@@ -17,7 +17,7 @@ export default function StatTile({
   return (
     <div className="px-5 py-4">
       <dt className="text-[13px] text-[var(--text-secondary)]">{label}</dt>
-      <dd className="tabular mt-1.5 text-2xl font-semibold tracking-tight">{value}</dd>
+      <dd className="tabular mt-1.5 font-serif text-3xl font-semibold tracking-tight">{value}</dd>
       {note && <p className="mt-1 text-xs text-[var(--text-muted)]">{note}</p>}
     </div>
   );
@@ -25,7 +25,7 @@ export default function StatTile({
 
 export function StatRow({ children }: { children: React.ReactNode }) {
   return (
-    <dl className="grid grid-cols-1 divide-y divide-[var(--line)] overflow-hidden rounded-lg border border-[var(--line)] bg-[var(--surface-raised)] sm:grid-cols-2 sm:divide-y-0 lg:grid-cols-4 [&>*]:sm:border-r [&>*]:sm:border-[var(--line)] [&>*:last-child]:sm:border-r-0">
+    <dl className="grid grid-cols-1 divide-y divide-[var(--line)] overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface-raised)] sm:grid-cols-2 sm:divide-y-0 lg:grid-cols-4 [&>*]:sm:border-r [&>*]:sm:border-[var(--line)] [&>*:last-child]:sm:border-r-0">
       {children}
     </dl>
   );

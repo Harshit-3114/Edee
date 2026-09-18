@@ -41,7 +41,7 @@ export default function CollegesPage() {
         <CollegeFilters value={query} onChange={setQuery} />
       </div>
 
-      <div className="mt-6">
+      <div className="mt-4">
         {loading && (
           <div className="grid gap-4" role="status" aria-live="polite">
             <span className="sr-only">Loading colleges</span>
@@ -76,6 +76,11 @@ export default function CollegesPage() {
 
         {!loading && !error && colleges.length > 0 && (
           <>
+            <p className="mb-3 text-[13px] text-[var(--text-secondary)]" aria-live="polite">
+              Showing {colleges.length} college{colleges.length === 1 ? '' : 's'}
+              {hasMore ? ', with more below' : ''}
+              {filtersApplied ? ' for the current filters' : ''}
+            </p>
             <div className="grid gap-4">
               {colleges.map((college) => (
                 <CollegeCard

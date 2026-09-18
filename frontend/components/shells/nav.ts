@@ -36,6 +36,7 @@ export const PORTAL_NAV: Record<Role, NavItem[]> = {
     { href: '/admin/users', label: 'Users and roles' },
     { href: '/admin/payments', label: 'Payments' },
     { href: '/admin/audit', label: 'Audit log' },
+    { href: '/admin/inbox', label: 'Inbox' },
     { href: '/admin/apis', label: 'API status' },
   ],
 };

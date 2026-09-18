@@ -1,11 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { MapPin, Phone, ArrowRight } from '@phosphor-icons/react/dist/ssr';
+import Image from 'next/image';
+import { MapPin, Phone, ArrowRight, EnvelopeSimple } from '@phosphor-icons/react/dist/ssr';
 import SiteHeader from '../_components/SiteHeader';
 import SiteFooter from '../_components/SiteFooter';
 import Reveal from '@/components/ui/Reveal';
-import { Input, Textarea } from '@/components/ui/Input';
+import { Input, Select, Textarea } from '@/components/ui/Input';
+import api, { apiErrorMessage } from '@/lib/api';
 
 const CONTACT_INFO = [
   { label: 'Email', value: 'hello@edeeapply.com', href: 'mailto:hello@edeeapply.com' },
@@ -15,20 +17,34 @@ const CONTACT_INFO = [
 
 export default function ContactPage() {
   const [formState, setFormState] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
-  const [values, setValues] = useState({ name: '', email: '', message: '' });
+  const [values, setValues] = useState({ name: '', email: '', purpose: '', message: '' });
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const [formError, setFormError] = useState('');
+
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>,
+  ) => {
     setValues((v) => ({ ...v, [e.target.name]: e.target.value }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormState('submitting');
-    // Simulate API call
-    await new Promise((r) => setTimeout(r, 1200));
-    setFormState('success');
-    setValues({ name: '', email: '', message: '' });
-    setTimeout(() => setFormState('idle'), 3000);
+    setFormError('');
+    try {
+      await api.post('/contact/', {
+        name: values.name.trim(),
+        email: values.email.trim().toLowerCase(),
+        purpose: values.purpose,
+        message: values.message.trim(),
+      });
+      setFormState('success');
+      setValues({ name: '', email: '', purpose: '', message: '' });
+      setTimeout(() => setFormState('idle'), 5000);
+    } catch (err) {
+      setFormState('error');
+      setFormError(apiErrorMessage(err, 'Could not send your message. Try again.'));
+    }
   };
 
   return (
@@ -37,19 +53,31 @@ export default function ContactPage() {
 
       <main id="main">
         {/* Hero */}
-        <section className="relative overflow-hidden bg-[var(--surface-sunken)]">
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--accent)_0%,_transparent_70%)] opacity-10" aria-hidden="true" />
-          <div className="relative mx-auto max-w-5xl px-6 py-24 lg:py-32 text-center hero-content">
+        <section className="relative overflow-hidden">
+          <Image
+            src="/campuses/loyola.jpg"
+            alt=""
+            aria-hidden="true"
+            fill
+            priority
+            sizes="100vw"
+            className="object-cover"
+          />
+          <div
+            aria-hidden="true"
+            className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/55 to-black/70"
+          />
+          <div className="relative mx-auto max-w-5xl px-6 py-24 lg:py-32 text-center">
             <Reveal>
-              <p className="text-[13px] font-medium tracking-wide text-[var(--accent-text)] uppercase">Get in touch</p>
+              <p className="text-[13px] font-medium tracking-wide text-white/70 uppercase">Get in touch</p>
             </Reveal>
             <Reveal delay={80}>
-              <h1 className="mt-3 text-4xl font-semibold tracking-tight md:text-5xl lg:text-6xl">
+              <h1 className="mt-3 font-serif text-4xl font-semibold tracking-tight text-white md:text-5xl lg:text-6xl">
                 We’d love to hear from you
               </h1>
             </Reveal>
             <Reveal delay={160}>
-              <p className="mt-5 max-w-[55ch] mx-auto text-base leading-relaxed text-[var(--text-secondary)]">
+              <p className="mt-5 max-w-[55ch] mx-auto text-base leading-relaxed text-white/85">
                 Whether you’re a student with a question, a college wanting to join, or a partner exploring collaboration – drop us a line and we’ll get back within 24 hours.
               </p>
             </Reveal>
@@ -68,8 +96,8 @@ export default function ContactPage() {
                 {CONTACT_INFO.map((c, i) => (
                   <Reveal key={c.label} delay={i * 80}>
                     <li className="card animate-fade-up flex items-start gap-4 p-5 rounded-xl border border-[var(--line)] bg-[var(--surface-raised)]">
-                      <div className="shrink-0 flex h-11 w-11 items-center justify-center rounded-xl bg-[var(--accent-subtle)] text-[var(--accent-text)]">
-                        {c.icon ? <c.icon size={20} aria-hidden="true" /> : <span>✉</span>}
+                      <div className="shrink-0 flex h-11 w-11 items-center justify-center rounded-lg bg-[var(--accent-subtle)] text-[var(--accent-text)]">
+                        {c.icon ? <c.icon size={20} aria-hidden="true" /> : <EnvelopeSimple size={20} aria-hidden="true" />}
                       </div>
                       <div>
                         <dt className="text-xs font-medium text-[var(--text-muted)] uppercase">{c.label}</dt>
@@ -83,26 +111,10 @@ export default function ContactPage() {
                   </Reveal>
                 ))}
               </ul>
-
-              {/* Quick links */}
-              <Reveal delay={240}>
-                <h3 className="text-lg font-semibold">Quick links</h3>
-              </Reveal>
-              <Reveal delay={260}>
-                <ul className="mt-4 flex flex-wrap gap-3" role="list">
-                  {['FAQ', 'Privacy policy', 'Terms of service', 'Press kit'].map((link) => (
-                    <li key={link}>
-                      <a href={`/#${link.toLowerCase().replace(/\s+/g, '-')}`} className="rounded-lg bg-[var(--surface-sunken)] px-4 py-2 text-sm text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] transition-colors">
-                        {link}
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              </Reveal>
             </div>
 
             {/* Form */}
-            <div>
+            <div className="rounded-xl border border-[var(--line)] bg-[var(--surface-raised)] p-6 shadow-[var(--shadow-sm)] md:p-8">
               <Reveal delay={120}>
                 <h2 className="text-xl font-semibold tracking-tight">Send us a message</h2>
               </Reveal>
@@ -114,6 +126,15 @@ export default function ContactPage() {
                     <p className="mt-3 text-sm font-medium text-[var(--success)]">Thanks! Your message has been sent.</p>
                   </div>
                 </Reveal>
+              )}
+
+              {formState === 'error' && formError && (
+                <div
+                  role="alert"
+                  className="mt-6 rounded-xl border border-[var(--danger-line)] bg-[var(--danger-subtle)] px-4 py-3.5 text-sm text-[var(--text-primary)]"
+                >
+                  {formError}
+                </div>
               )}
 
               <form onSubmit={handleSubmit} className="mt-6 space-y-5" noValidate>
@@ -148,6 +169,28 @@ export default function ContactPage() {
                 </div>
 
                 <Reveal delay={220}>
+                  <label className="flex flex-col gap-1.5">
+                    <span className="text-sm font-medium">Purpose of contacting</span>
+                    <Select
+                      name="purpose"
+                      value={values.purpose}
+                      onChange={handleChange}
+                      required
+                      disabled={formState === 'submitting'}
+                    >
+                      <option value="">Select a reason</option>
+                      <option value="admissions">Admissions question (student)</option>
+                      <option value="join-college">Join as a college</option>
+                      <option value="coaching">Coaching partnership</option>
+                      <option value="payments">Payments & billing help</option>
+                      <option value="problem">Report a problem</option>
+                      <option value="press">Press & media</option>
+                      <option value="other">Something else</option>
+                    </Select>
+                  </label>
+                </Reveal>
+
+                <Reveal delay={230}>
                   <label className="flex flex-col gap-1.5">
                     <span className="text-sm font-medium">Message</span>
                     <Textarea
@@ -186,23 +229,6 @@ export default function ContactPage() {
           </div>
         </section>
 
-        {/* Map placeholder */}
-        <section className="border-t border-[var(--line)] bg-[var(--surface-sunken)]">
-          <div className="mx-auto max-w-6xl px-6 py-16 lg:py-24">
-            <Reveal>
-              <h2 className="text-xl font-semibold tracking-tight text-center">Visit us</h2>
-            </Reveal>
-            <div className="mt-8 relative aspect-[16/9] rounded-2xl overflow-hidden bg-[var(--surface-raised)]">
-              {/* static map image placeholder */}
-              <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-[var(--accent)]/5 to-[var(--accent)]/10">
-                <MapPin size={48} className="text-[var(--accent-text)] opacity-30" aria-hidden="true" />
-              </div>
-              <div className="absolute bottom-4 right-4 rounded-lg bg-[var(--surface)]/90 backdrop-blur px-4 py-2 text-sm text-[var(--text-secondary)]">
-                12th Floor, Tech Park, Bengaluru
-              </div>
-            </div>
-          </div>
-        </section>
       </main>
 
       <SiteFooter />

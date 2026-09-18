@@ -27,8 +27,8 @@ export default function CollegeLandingPage({ college }: { college: CollegeLandin
     <main id="main" className="mx-auto max-w-5xl px-6 py-10">
       <BackLink href="/" label="Home" />
 
-      {/* Hero with optional image or gradient placeholder */}
-      <section className="relative rounded-2xl overflow-hidden bg-[var(--surface-sunken)] animate-fade-up" style={stagger(0)}>
+      {/* Hero with optional image or flat placeholder */}
+      <section className="relative rounded-xl overflow-hidden bg-[var(--surface-sunken)] animate-fade-up" style={stagger(0)}>
         {college.landing_hero_image_url ? (
           <Image
             src={college.landing_hero_image_url}
@@ -39,9 +39,9 @@ export default function CollegeLandingPage({ college }: { college: CollegeLandin
             sizes="100vw"
           />
         ) : (
-          <div className="absolute inset-0 bg-gradient-to-br from-[var(--accent)]/10 to-[var(--accent)]/5" />
+          <div className="absolute inset-0 bg-[var(--accent-subtle)]" />
         )}
-        <div className="relative p-8 md:p-12 hero-content">
+        <div className="relative p-8 md:p-12">
           <p className="text-[13px] font-medium tracking-wide text-[var(--accent-text)] uppercase">
             {college.city}, {college.state} · {openCourses.length}{' '}
             {openCourses.length === 1 ? 'open course' : 'open courses'}
@@ -53,8 +53,6 @@ export default function CollegeLandingPage({ college }: { college: CollegeLandin
             {college.location} · {college.type === 'government' ? 'Government' : college.type === 'deemed' ? 'Deemed university' : 'Private'}
           </p>
         </div>
-        {/* bottom vignette */}
-        <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-[var(--surface)] to-transparent pointer-events-none" />
       </section>
 
       {college.landing_description && (
@@ -141,7 +139,7 @@ export default function CollegeLandingPage({ college }: { college: CollegeLandin
 
       {/* CTA */}
       <section className="mt-12 animate-fade-up" style={stagger(8)}>
-        <div className="rounded-2xl bg-[var(--accent-subtle)] px-6 py-8 md:px-10 md:py-12 border border-[var(--accent-line)]">
+        <div className="rounded-xl bg-[var(--accent-subtle)] px-6 py-8 md:px-10 md:py-12 border border-[var(--accent-line)]">
           <h2 className="text-base font-medium tracking-tight">Like what you see?</h2>
           <p className="mt-1 text-sm leading-relaxed text-[var(--text-secondary)]">
             Shortlist these courses and pay once. The college sees your application the moment payment clears.

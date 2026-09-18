@@ -8,7 +8,7 @@ import { forwardRef } from 'react';
   contrast is invisible to the people most likely to need the hint.
 */
 const BASE =
-  'h-10 w-full rounded-lg border border-[var(--line-strong)] bg-[var(--surface-raised)] px-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] transition-colors disabled:opacity-55 aria-[invalid=true]:border-[var(--danger)]';
+  'h-10 w-full rounded-lg border border-[var(--line-strong)] bg-[var(--surface-raised)] px-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] transition-colors disabled:opacity-55 aria-[invalid=true]:border-[var(--danger)] focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/20';
 
 export const Input = forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(
   function Input({ className = '', ...props }, ref) {

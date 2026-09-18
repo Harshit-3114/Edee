@@ -17,6 +17,8 @@ from app.routers import (
     colleges,
     shortlists,
     payments,
+    notifications,
+    contact,
     college_portal,
     coaching_portal,
     admin,
@@ -177,6 +179,8 @@ app.include_router(students.router, prefix="/students", tags=["student"])
 app.include_router(colleges.router, prefix="/colleges", tags=["student"])
 app.include_router(shortlists.router, prefix="/shortlists", tags=["student"])
 app.include_router(payments.router, prefix="/payments", tags=["student"])
+app.include_router(notifications.router, prefix="/notifications", tags=["notifications"])
+app.include_router(contact.router, prefix="/contact", tags=["contact"])
 app.include_router(college_portal.router, prefix="/college", tags=["college"])
 app.include_router(coaching_portal.router, prefix="/coaching", tags=["coaching"])
 app.include_router(admin.router, prefix="/admin", tags=["admin"])

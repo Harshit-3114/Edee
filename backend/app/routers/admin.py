@@ -646,3 +646,22 @@ async def list_audit(
         params,
     )
     return [dict(r._mapping) for r in result.fetchall()]
+
+
+@router.get("/contact-messages")
+async def list_contact_messages(
+    limit: int = Query(100, ge=1, le=500),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        text(
+            """
+            SELECT id, name, email, purpose, message, created_at
+            FROM contact_messages
+            ORDER BY created_at DESC
+            LIMIT :limit
+            """
+        ),
+        {"limit": limit},
+    )
+    return [dict(r._mapping) for r in result.fetchall()]

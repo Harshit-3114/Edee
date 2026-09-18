@@ -49,19 +49,31 @@ export default function AboutPage() {
 
       <main id="main">
         {/* Hero */}
-        <section className="relative overflow-hidden bg-[var(--surface-sunken)]">
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--accent)_0%,_transparent_70%)] opacity-10" aria-hidden="true" />
-          <div className="relative mx-auto max-w-5xl px-6 py-24 lg:py-32 text-center hero-content">
+        <section className="relative overflow-hidden">
+          <Image
+            src="/campuses/xaviers.jpg"
+            alt=""
+            aria-hidden="true"
+            fill
+            priority
+            sizes="100vw"
+            className="object-cover"
+          />
+          <div
+            aria-hidden="true"
+            className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/55 to-black/70"
+          />
+          <div className="relative mx-auto max-w-5xl px-6 py-24 lg:py-32 text-center">
             <Reveal>
-              <p className="text-[13px] font-medium tracking-wide text-[var(--accent-text)] uppercase">About Edee Apply</p>
+              <p className="text-[13px] font-medium tracking-wide text-white/70 uppercase">About Edee Apply</p>
             </Reveal>
             <Reveal delay={80}>
-              <h1 className="mt-3 text-4xl font-semibold tracking-tight md:text-5xl lg:text-6xl">
+              <h1 className="mt-3 font-serif text-4xl font-semibold tracking-tight text-white md:text-5xl lg:text-6xl">
                 Making college admissions simple, fair, and fast.
               </h1>
             </Reveal>
             <Reveal delay={160}>
-              <p className="mt-5 max-w-[55ch] mx-auto text-base leading-relaxed text-[var(--text-secondary)]">
+              <p className="mt-5 max-w-[55ch] mx-auto text-base leading-relaxed text-white/85">
                 We’re a team of former applicants, engineers, and admission officers who believe the path to higher education shouldn’t be a maze of portals, hidden fees, and uncertainty.
               </p>
             </Reveal>
@@ -76,8 +88,8 @@ export default function AboutPage() {
           <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
             {VALUES.map((v, i) => (
               <Reveal key={v.title} delay={i * 80}>
-                <article className="card animate-fade-up p-6 rounded-2xl border border-[var(--line)] bg-[var(--surface-raised)] text-center">
-                  <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--accent-subtle)] text-[var(--accent-text)]">
+                <article className="card animate-fade-up h-full rounded-xl border border-[var(--line)] bg-[var(--surface-raised)] p-6 text-center">
+                  <div className="inline-flex h-14 w-14 items-center justify-center rounded-lg bg-[var(--accent-subtle)] text-[var(--accent-text)]">
                     <v.icon size={22} aria-hidden="true" />
                   </div>
                   <h3 className="mt-4 text-base font-semibold">{v.title}</h3>
@@ -89,23 +101,35 @@ export default function AboutPage() {
         </section>
 
         {/* Milestones timeline */}
-        <section className="border-y border-[var(--line)] bg-[var(--surface-sunken)]">
-          <div className="mx-auto max-w-6xl px-6 py-16 lg:py-24">
+        <section className="relative overflow-hidden">
+          <Image
+            src="/campuses/christ.jpg"
+            alt=""
+            aria-hidden="true"
+            fill
+            sizes="100vw"
+            className="object-cover"
+          />
+          <div
+            aria-hidden="true"
+            className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/60 to-black/70"
+          />
+          <div className="relative mx-auto max-w-6xl px-6 py-16 lg:py-24">
             <Reveal>
-              <h2 className="text-2xl font-semibold tracking-tight text-center">Our journey so far</h2>
+              <h2 className="font-serif text-3xl font-semibold tracking-tight text-white md:text-4xl text-center">Our journey so far</h2>
             </Reveal>
             <ol className="mt-12 relative">
               {/* vertical line */}
-              <div className="absolute left-6 top-0 bottom-0 w-px bg-[var(--line-strong)] lg:left-[140px]" aria-hidden="true" />
-{MILESTONES.map((m, i) => {
+              <div className="absolute left-6 top-0 bottom-0 w-px bg-white/25 lg:left-[140px]" aria-hidden="true" />
+              {MILESTONES.map((m, i) => {
                 return (
                   <Reveal key={m.year} delay={i * 100}>
                     <li className="relative pl-16 pb-10 lg:pl-[180px] animate-fade-up">
                       <div className="absolute left-2 top-1 flex h-10 w-10 items-center justify-center rounded-full bg-[var(--accent)] text-[var(--text-inverse)] text-sm font-bold lg:left-[132px]">
                         {m.year}
                       </div>
-                      <h3 className="text-base font-semibold">{m.title}</h3>
-                      <p className="mt-1 text-sm text-[var(--text-secondary)]">{m.desc}</p>
+                      <h3 className="text-base font-semibold text-white">{m.title}</h3>
+                      <p className="mt-1 text-sm text-white/80">{m.desc}</p>
                     </li>
                   </Reveal>
                 );
@@ -122,7 +146,7 @@ export default function AboutPage() {
           <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
             {TEAM.map((t, i) => (
               <Reveal key={t.name} delay={i * 80}>
-                <article className="card animate-fade-up overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--surface-raised)] text-center">
+                <article className="card animate-fade-up overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface-raised)] text-center">
                   <div className="aspect-square w-full bg-[var(--surface-sunken)] relative">
                     {t.avatar && (
                       <Image
@@ -152,9 +176,22 @@ export default function AboutPage() {
         {/* CTA */}
         <section className="mx-auto max-w-6xl px-6 py-16 lg:py-24 text-center">
           <Reveal>
-            <div className="rounded-2xl bg-[var(--accent-subtle)] px-6 py-10 md:px-12 md:py-16 border border-[var(--accent-line)] animate-scale-in">
-              <h2 className="text-2xl font-semibold tracking-tight">Want to join the mission?</h2>
-              <p className="mt-3 max-w-[48ch] mx-auto text-sm leading-relaxed text-[var(--text-secondary)]">
+            <div className="relative overflow-hidden rounded-xl px-6 py-10 md:px-12 md:py-16 animate-scale-in">
+              <Image
+                src="/campuses/xaviers.jpg"
+                alt=""
+                aria-hidden="true"
+                fill
+                sizes="(max-width: 1024px) 100vw, 72rem"
+                className="object-cover"
+              />
+              <div
+                aria-hidden="true"
+                className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/60 to-black/70"
+              />
+              <div className="relative">
+              <h2 className="font-serif text-2xl font-semibold tracking-tight text-white md:text-3xl">Want to join the mission?</h2>
+              <p className="mt-3 max-w-[48ch] mx-auto text-sm leading-relaxed text-white/85">
                 We’re always looking for curious builders who care about education equity. Check our careers page or drop us a line.
               </p>
               <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
@@ -162,9 +199,10 @@ export default function AboutPage() {
                   Get in touch
                   <ArrowRight size={16} weight="bold" />
                 </LinkButton>
-                <LinkButton href="/colleges" variant="secondary" className="btn" size="md">
+                <LinkButton href="/colleges" variant="secondary" className="btn border-white/30 bg-white/95" size="md">
                   See the platform
                 </LinkButton>
+              </div>
               </div>
             </div>
           </Reveal>

@@ -293,6 +293,40 @@ class AuditEvent(Base):
     created_at = Column(DateTime(timezone=True), default=_utcnow, server_default=func.now())
 
 
+class Notification(Base):
+    """
+    One inbox row per event per recipient.
+
+    Addressed by Firebase UID from the verified token, so listing needs no
+    join and ownership is a WHERE clause, not application logic.
+    """
+
+    __tablename__ = "notifications"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    recipient_uid = Column(Text, nullable=False)
+    role = Column(Text, nullable=False)
+    type = Column(Text, nullable=False)
+    title = Column(Text, nullable=False)
+    body = Column(Text)
+    link = Column(Text)
+    read_at = Column(DateTime(timezone=True))
+    created_at = Column(DateTime(timezone=True), default=_utcnow, server_default=func.now())
+
+
+class ContactMessage(Base):
+    """A message sent through the public contact form."""
+
+    __tablename__ = "contact_messages"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(Text, nullable=False)
+    email = Column(Text, nullable=False)
+    purpose = Column(Text, nullable=False)
+    message = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=_utcnow, server_default=func.now())
+
+
 class PlatformUser(Base):
     __tablename__ = "platform_users"
 

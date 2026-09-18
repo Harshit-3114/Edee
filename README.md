@@ -1,8 +1,8 @@
 # Edee Apply – College-Application Platform
 
 > FastAPI service plus a Next.js frontend: student signup, college search and
-> shortlisting, Razorpay payment, student withdrawal, coaching invites, and
-> four role-based portals.
+> shortlisting, Razorpay payment, student withdrawal, coaching invites,
+> functional contact form with admin inbox, and four role-based portals.
 
 **Repository layout**
 
@@ -57,6 +57,7 @@ npm run dev
 | College portal | http://localhost:3000/college/dashboard |
 | Coaching portal | http://localhost:3000/coaching/dashboard |
 | Admin portal | http://localhost:3000/admin/dashboard |
+| Admin inbox | http://localhost:3000/admin/inbox |
 | API | http://localhost:8000 |
 | API docs | http://localhost:8000/docs (hidden in production) |
 | Docker Postgres | 127.0.0.1:5433 |
@@ -117,12 +118,51 @@ integration, including two issues that were giving away free applications.
 |------|------------|
 | **API** | FastAPI 0.115 (async) |
 | **DB** | PostgreSQL 16 (asyncpg) |
-| **Migrations** | Alembic |
+| **Migrations** | Alembic (5 migrations: 001–005) |
 | **Auth** | Firebase Admin SDK (JWT verification) |
 | **Payments** | Razorpay (order creation + webhook) |
 | **Containerisation** | Docker + docker‑compose |
-| **Testing** | pytest / httpx (backend, 175 tests) · Vitest (frontend, 88 tests) |
+| **Testing** | pytest / httpx (backend, 196 tests) · Vitest (frontend, 107 tests) |
 | **Code quality** | black, ruff, ESLint, `tsc --noEmit` |
+
+---
+
+## ✨ Key Features Delivered
+
+**Public pages redesign**
+- Hero sections with campus photography, dark gradient overlays, serif headlines
+- Alternating photo/tinted sections across landing, about, why-us, contact
+- Login/signup pages with full-bleed campus photos, wider cards, merged dev flow
+- Header with emerald monogram logo, translucent sheen sweep, red sign-out
+
+**Contact form → Admin inbox**
+- Public form with purpose dropdown (admissions, join college, coaching, payments, problem, press, other)
+- Backend `/contact/` endpoint with rate limiting, validation, `/admin/contact-messages` read endpoint
+- New migration `005_contact_messages` + `contact_messages` table + admin inbox page
+
+**Portal shell overhaul**
+- Top header only (no sidebar), emerald pine header with white text, red solid sign-out
+- Notification bell with live unread count, markdown-all, deep-link on click
+- Notifications written on application status changes and payment capture
+
+**Design system**
+- Pure white canvas (`#ffffff`), pine accent `#0b3d2e`, warm sand neutrals removed
+- Solid status pills (mint/amber/clay/red), no pale tints
+- 12px cards/tables, 8px controls, pill badges only
+- Self-hosted Mulish (body) + Poppins (headlines), no Google Fonts at runtime
+- Scroll-triggered animations, staggered pop-in, progress rail on step lists
+- Reduced-motion safe, GPU-only props
+
+**Backend hardening**
+- Notifications table + writer service + router (`/notifications/`)
+- Contact messages table + writer + public + admin endpoints
+- Stream filter now filters nested course array correctly
+- SQL echo off by default (`SQL_ECHO` env var)
+- Middleware → proxy migration (Next.js 15 compatible)
+
+**Testing**
+- Backend: 196 tests (pytest, httpx, asyncpg, function-scoped isolated schemas)
+- Frontend: 107 tests (Vitest, jsdom, RTL)
 
 ---
 
@@ -305,7 +345,15 @@ Portals:
 
 - College: `/college/dashboard`, `/college/courses/*`, `/college/applications/*`, `/college/profile`
 - Coaching: `/coaching/dashboard`, `/coaching/students/*`, `/coaching/invites`, `/coaching/profile`
-- Admin: `/admin/dashboard`, `/admin/colleges/*`, `/admin/coaching-centres`, `/admin/students`, `/admin/users`, `/admin/payments`, `/admin/audit`, `/admin/system` (live dependency checks for the status page)
+- Admin: `/admin/dashboard`, `/admin/colleges/*`, `/admin/coaching-centres`, `/admin/students`, `/admin/users`, `/admin/payments`, `/admin/audit`, `/admin/inbox`, `/admin/system` (live dependency checks for the status page)
+
+Contact & Notifications:
+
+- `POST /contact/` — public contact form (rate limited, validated, stores in `contact_messages`)
+- `GET /admin/contact-messages` — admin-only inbox listing
+- `GET /notifications/` — list own notifications (8 latest + unread count)
+- `PATCH /notifications/{id}/read` — mark one read
+- `POST /notifications/read-all` — mark all read
 
 Every response carries `X-Request-ID`; the backend logs one line per request
 at INFO (health checks at DEBUG), so a user report maps to a single grep.

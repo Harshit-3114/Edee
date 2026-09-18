@@ -14,7 +14,7 @@ export default function CheckoutSummary({
   return (
     <section
       aria-labelledby="order-summary"
-      className="rounded-lg border border-[var(--line)] bg-[var(--surface-raised)]"
+      className="rounded-xl border border-[var(--line)] bg-[var(--surface-raised)]"
     >
       <h2
         id="order-summary"
