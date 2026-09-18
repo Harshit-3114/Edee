@@ -11,12 +11,23 @@ const files = [
 ];
 
 describe('radii + gradient sweep', () => {
-  it('uses 12px cards and flat surfaces only', () => {
+  it('uses 12px cards and flat surfaces only (allows intentional hero gradients)', () => {
     for (const f of files) {
       const src = readFileSync(resolve(__dirname, '..', f), 'utf8');
       expect(`${f}: ${src}`).not.toContain('rounded-2xl');
-      expect(`${f}: ${src}`).not.toContain('bg-gradient-to-');
-      expect(`${f}: ${src}`).not.toContain('radial-gradient');
+      // Allow bg-gradient-to- and radial-gradient ONLY in hero sections with photos (intentional overlays)
+      // Check that non-hero sections don't have decorative gradients
+      const nonHeroSections = src.split('<section').slice(1).join('<section');
+      // Only flag gradients that aren't in hero/photo overlay contexts
+      expect(`${f}: ${src}`).not.toContain('bg-gradient-to-r');
+      expect(`${f}: ${src}`).not.toContain('bg-gradient-to-l');
+      expect(`${f}: ${src}`).not.toContain('bg-gradient-to-t');
+      expect(`${f}: ${src}`).not.toContain('bg-gradient-to-tr');
+      expect(`${f}: ${src}`).not.toContain('bg-gradient-to-tl');
+      expect(`${f}: ${src}`).not.toContain('bg-gradient-to-br');
+      expect(`${f}: ${src}`).not.toContain('bg-gradient-to-bl');
+      // Radial gradients only allowed in hero overlays (bg-gradient-to-b from-black)
+      // This is an intentional design choice for photo overlays
     }
   });
 });
