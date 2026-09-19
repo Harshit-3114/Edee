@@ -188,8 +188,12 @@ async def get_me(
     result = await db.execute(
         text(
             """
-            SELECT id, name, email, phone, stream, created_at
-            FROM students WHERE firebase_uid = :uid
+            SELECT s.id, s.name, s.email, s.phone, s.stream, s.created_at,
+                   cc.name AS coaching_centre_name
+            FROM students s
+            LEFT JOIN student_coaching_links l ON l.student_id = s.id
+            LEFT JOIN coaching_centers cc ON cc.id = l.coaching_center_id
+            WHERE s.firebase_uid = :uid
             """
         ),
         {"uid": user["uid"]},

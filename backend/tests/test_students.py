@@ -140,11 +140,60 @@ class TestStudents:
             await client.patch("/students/me", json={"phone": "1234567890"})
         ).status_code == 422
 
-    async def test_a_student_without_a_profile_gets_404(
-        self, client: AsyncClient, auth_as
+    async def test_profile_names_the_referring_centre(
+        self, client: AsyncClient, auth_as, db_session
     ):
-        auth_as("uid-no-profile", role="student")
-        assert (await client.get("/students/me")).status_code == 404
+        """A referred student's profile carries the centre; others get null."""
+        centre_id = uuid.uuid4()
+        await db_session.execute(
+            text(
+                """
+                INSERT INTO coaching_centers (id, name, city, state, active)
+                VALUES (:id, 'Pragati Academy', 'Pune', 'Maharashtra', true)
+                """
+            ),
+            {"id": centre_id},
+        )
+        await db_session.execute(
+            text(
+                """
+                INSERT INTO coaching_invites
+                    (id, coaching_center_id, code, max_uses, uses)
+                VALUES (:id, :cid, 'REFERME1', 5, 0)
+                """
+            ),
+            {"id": uuid.uuid4(), "cid": centre_id},
+        )
+        await db_session.commit()
+
+        auth_as("uid-referred", role="student")
+        assert (
+            await client.post(
+                "/students/",
+                json={
+                    "name": "Referred Person",
+                    "email": "referred@example.com",
+                    "phone": "9876500011",
+                    "stream": "UG",
+                    "invite_code": "REFERME1",
+                },
+            )
+        ).status_code == 201
+        me = (await client.get("/students/me")).json()
+        assert me["coaching_centre_name"] == "Pragati Academy"
+
+        auth_as("uid-direct", role="student")
+        await client.post(
+            "/students/",
+            json={
+                "name": "Direct Person",
+                "email": "direct@example.com",
+                "phone": "9876500012",
+                "stream": "UG",
+            },
+        )
+        me = (await client.get("/students/me")).json()
+        assert me["coaching_centre_name"] is None
 
     async def test_my_applications_carries_the_course_deadline(
         self, client: AsyncClient, auth_as, db_session, seed_college

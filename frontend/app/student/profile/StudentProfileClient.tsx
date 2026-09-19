@@ -149,6 +149,17 @@ export default function StudentProfileClient({
             )}
           </Field>
 
+          {student.coaching_centre_name && (
+            <Field
+              label="Referred by"
+              hint="Set when you signed up. Only the platform team can change it."
+            >
+              {(fieldProps) => (
+                <Input {...fieldProps} value={student.coaching_centre_name ?? ''} readOnly disabled />
+              )}
+            </Field>
+          )}
+
           {error && <ErrorState message={error} />}
 
           <div className="flex items-center gap-3">

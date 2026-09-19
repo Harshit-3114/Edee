@@ -67,6 +67,8 @@ export interface Student {
   phone: string;
   stream: Stream;
   coaching_centre_id: string | null;
+  /** Referring centre name when signed up with an invite code. Read-only. */
+  coaching_centre_name?: string | null;
   created_at: string;
 }
 

@@ -83,6 +83,9 @@ class StudentProfile(BaseModel):
     email: EmailStr
     phone: str
     stream: str
+    # The referring centre, if the student signed up with an invite code.
+    # Read-only everywhere: signup sets it, nothing ever changes it.
+    coaching_centre_name: Optional[str] = None
     # datetime, not str: the column is TIMESTAMPTZ, and typing it as str made
     # FastAPI fail serialisation on every profile read.
     created_at: datetime
