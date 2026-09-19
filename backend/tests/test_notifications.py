@@ -14,8 +14,9 @@ async def two_notifications(db_session):
             INSERT INTO notifications
                 (id, recipient_uid, role, type, title, body, link)
             VALUES (:a, 'uid-fixture-student', 'student', 'application_status',
-                    'Under review: B.Sc Statistics', NULL, '/student/dashboard'),
-                   (:b, 'uid-someone-else', 'student', 'application_status',
+                    'Update on your application for B.Sc Statistics at Fergusson College',
+                    NULL, '/student/dashboard'),
+                    (:b, 'uid-someone-else', 'student', 'application_status',
                     'Not yours', NULL, '/student/dashboard')
             """
         ),
@@ -76,7 +77,7 @@ class TestNotifications:
         data = (await client.get("/notifications/")).json()
         assert data["unread_count"] == 1
         assert [n["title"] for n in data["notifications"]] == [
-            "Under review: B.Sc Statistics"
+            "Update on your application for B.Sc Statistics at Fergusson College"
         ]
 
     async def test_mark_read_then_read_all(

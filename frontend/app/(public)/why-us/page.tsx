@@ -27,8 +27,8 @@ const FEATURES = [
   },
   {
     icon: Clock,
-    title: 'Real‑time status',
-    body: 'Track every application from submission to decision in one dashboard, with instant notifications.',
+    title: 'One dashboard',
+    body: 'Shortlist, pay and see every application you have filed in one place, with instant confirmations.',
   },
   {
     icon: GraduationCap,
