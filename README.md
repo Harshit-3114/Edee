@@ -182,6 +182,11 @@ sign-in without Firebase or SMS, and `GET /health` reports it
 - **Mock users are process-scoped.** Sign-out calls `DELETE /dev/mock-user`,
   which removes the identity and everything it created; server shutdown
   sweeps any leftovers. A mock user never survives the process that made it.
+- **Empty database, open laptop: mock catalogue.** Booting in dev mode with
+  no colleges seeds a small catalogue (colleges with application windows, a
+  coaching centre, scholarship slabs) so every page has something to show.
+  Skipped when dev mode is off, and skipped when colleges exist — real data
+  is never touched.
 - `GET /dev/directory` (dev mode only, otherwise 404) lists colleges and
   centres to sign in as.
 - `DEV_MODE=1` in `backend/.env` (or `NEXT_PUBLIC_DEV_MODE=1` for the panel)
@@ -201,13 +206,13 @@ integration, including two issues that were giving away free applications.
 |------|------------|
 | **API** | FastAPI 0.115 (async) |
 | **DB** | PostgreSQL 16 (asyncpg) |
-| **Migrations** | Alembic (8 migrations: 001–008) |
+| **Migrations** | Alembic (9 migrations: 001–009) |
 | **Rendering** | Next.js 16 App Router — portal pages server-rendered via session cookie |
 | **Auth** | Firebase Admin SDK (JWT verification); phone OTP in production, any-4-digits mirror in dev |
 | **Payments** | Razorpay (order creation + webhook) |
 | **Email** | SMTP transactional mail (decisions, receipts, welcomes, alerts) |
 | **Containerisation** | Docker + docker‑compose |
-| **Testing** | pytest / httpx (backend, 227 tests) · Vitest (frontend, ~180 tests) |
+| **Testing** | pytest / httpx (backend, 228 tests) · Vitest (frontend, ~180 tests) |
 | **Code quality** | black, ruff, ESLint, `tsc --noEmit` |
 
 ---
@@ -227,8 +232,13 @@ integration, including two issues that were giving away free applications.
 - Acknowledgement email to the sender plus an optional alert to `ADMIN_EMAIL`
 
 **Student dashboard**
-- Applied applications with per-card deadlines, plus a shortlisted section with fees, deadlines and a pay CTA
+- Applied colleges with per-card deadlines, plus a shortlisted section with fees, deadlines and a pay CTA
+- No verdicts anywhere student-facing: no status pills, counts, notes or withdraw controls; status-change notifications and emails use neutral "update" wording (old headlines backfilled by migration `009`)
 - Submission confirmations: `?paid=1` after checkout, `?welcome=1` after signup
+
+**Referral tracking**
+- `GET /students/me` returns `coaching_centre_name` from the invite link; shown as a disabled "Referred by" field on the profile page
+- Set once at signup and tamper-proof: `PATCH /students/me` allow-lists name/phone/stream only, and the coaching portal has no write path to student rows at all
 
 **Application windows (migration `006`)**
 - Courses carry `application_start_date` and `intake_info` alongside `closing_date`
@@ -288,7 +298,7 @@ edee/
 │  │  ├─ services/      # Razorpay client, Firebase role claims, email, lead files
 │  │  ├─ uploads/       # college logos served at /uploads (gitignored, volume-backed)
 │  │  └─ main.py        # FastAPI entry point
-│  ├─ migrations/        # Alembic 001–008
+│  ├─ migrations/        # Alembic 001–009
 │  ├─ seeds/             # colleges, demo role accounts
 │  ├─ tests/             # pytest suite
 │  ├─ Dockerfile
