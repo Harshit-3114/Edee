@@ -1,7 +1,8 @@
 import LandingBackLink from './LandingBackLink';
 import LandingCta from './LandingCta';
+import LandingShortlistButton from './LandingShortlistButton';
 import { Table, TableWrap, Td, Th, Tr } from '@/components/ui/Table';
-import { formatFee } from '@/lib/format';
+import { apiFileUrl, formatDate, formatFee } from '@/lib/format';
 import type { CollegeLanding } from '@/lib/types';
 import Image from 'next/image';
 
@@ -46,9 +47,21 @@ export default function CollegeLandingPage({ college }: { college: CollegeLandin
             {college.city}, {college.state} · {openCourses.length}{' '}
             {openCourses.length === 1 ? 'open course' : 'open courses'}
           </p>
-          <h1 className="mt-2 text-3xl font-semibold tracking-tight md:text-4xl lg:text-5xl">
-            {college.name}
-          </h1>
+          <span className="mt-2 flex items-center gap-4">
+            {apiFileUrl(college.logo_url) && (
+              <Image
+                src={apiFileUrl(college.logo_url) as string}
+                alt={`${college.name} logo`}
+                width={64}
+                height={64}
+                unoptimized
+                className="h-16 w-16 shrink-0 rounded-lg bg-white/90 object-contain p-1.5"
+              />
+            )}
+            <h1 className="text-3xl font-semibold tracking-tight md:text-4xl lg:text-5xl">
+              {college.name}
+            </h1>
+          </span>
           <p className="mt-2 text-sm text-[var(--text-secondary)]">
             {college.location} · {college.type === 'government' ? 'Government' : college.type === 'deemed' ? 'Deemed university' : 'Private'}
           </p>
@@ -58,6 +71,15 @@ export default function CollegeLandingPage({ college }: { college: CollegeLandin
       {college.landing_description && (
         <section className="mt-10 animate-fade-up" style={stagger(1)}>
           <p className="max-w-[70ch] text-[15px] leading-relaxed">{college.landing_description}</p>
+        </section>
+      )}
+
+      {college.application_phases && (
+        <section className="mt-10 animate-fade-up" style={stagger(1)}>
+          <h2 className="text-lg font-medium tracking-tight">Admission phases</h2>
+          <p className="mt-2 max-w-[70ch] text-[15px] leading-relaxed text-[var(--text-secondary)]">
+            {college.application_phases}
+          </p>
         </section>
       )}
 
@@ -119,6 +141,12 @@ export default function CollegeLandingPage({ college }: { college: CollegeLandin
                       <Th>Stream</Th>
                       <Th numeric>Seats</Th>
                       <Th numeric>Fee</Th>
+                      <Th>Intake</Th>
+                      <Th>Opens</Th>
+                      <Th>Deadline</Th>
+                      <Th>
+                        <span className="sr-only">Shortlist</span>
+                      </Th>
                     </tr>
                   </thead>
                   <tbody>
@@ -128,6 +156,23 @@ export default function CollegeLandingPage({ college }: { college: CollegeLandin
                         <Td>{course.stream}</Td>
                         <Td numeric>{course.seats ?? '-'}</Td>
                         <Td numeric>{formatFee(course.application_fee)}</Td>
+                        <Td>{course.intake_info ?? '-'}</Td>
+                        <Td>
+                          {course.application_start_date
+                            ? formatDate(course.application_start_date)
+                            : 'Open'}
+                        </Td>
+                        <Td>
+                          {course.closing_date ? formatDate(course.closing_date) : 'No deadline'}
+                        </Td>
+                        <Td>
+                          <LandingShortlistButton
+                            collegeId={course.college_id}
+                            courseId={course.id}
+                            courseName={`${course.course_name} at ${college.name}`}
+                            slug={college.slug}
+                          />
+                        </Td>
                       </Tr>
                     ))}
                   </tbody>

@@ -162,13 +162,26 @@ freezing an empty catalogue into the page.
 ## Development without Firebase (dev mode)
 
 When the backend has no Firebase service account (and `ENVIRONMENT` is
-development), it runs in **dev mode**: the login page offers developer
-quick sign-in, and any well-formed `dev:` token works — no Firebase project
-needed. `GET /health` reports it (`dev_mode: true`), and `start.bat` prints
-a banner when it detects it.
+development), it runs in **dev mode**: the login page mirrors production
+sign-in without Firebase or SMS, and `GET /health` reports it
+(`dev_mode: true`). `start.bat` prints a banner when it detects it.
 
-- Tokens look like `dev:student[:tag]`, `dev:admin`, `dev:college:<id>`,
-  `dev:coaching:<id>`. The tag makes you a different student.
+- **Students sign in with phone + OTP, like production.** Enter any 10
+  digits, then any 4 digits on the code screen — no Firebase, no SMS. The
+  server provisions a mock profile behind the token, so the student lands
+  with everything working: profile, shortlisting, checkout. The same number
+  twice is the same mock user.
+- **Mock payments walk the real path.** Checkout totals tick up from the
+  same pricing code; the dev pay button then runs the same fulfillment as
+  the Razorpay webhook (same applications, audit rows, notifications) with
+  `dev_`-tagged rows that can never be mistaken for money. The dashboard
+  confirms with a dev-mode note.
+- **Staff portals keep a directory picker** (college / coaching / admin):
+  `POST /dev/mock-user` provisions real database rows behind the token,
+  idempotently: signing in twice as the same tag reuses the same rows.
+- **Mock users are process-scoped.** Sign-out calls `DELETE /dev/mock-user`,
+  which removes the identity and everything it created; server shutdown
+  sweeps any leftovers. A mock user never survives the process that made it.
 - `GET /dev/directory` (dev mode only, otherwise 404) lists colleges and
   centres to sign in as.
 - `DEV_MODE=1` in `backend/.env` (or `NEXT_PUBLIC_DEV_MODE=1` for the panel)
@@ -188,12 +201,13 @@ integration, including two issues that were giving away free applications.
 |------|------------|
 | **API** | FastAPI 0.115 (async) |
 | **DB** | PostgreSQL 16 (asyncpg) |
-| **Migrations** | Alembic (5 migrations: 001–005) |
+| **Migrations** | Alembic (8 migrations: 001–008) |
 | **Rendering** | Next.js 16 App Router — portal pages server-rendered via session cookie |
-| **Auth** | Firebase Admin SDK (JWT verification) |
+| **Auth** | Firebase Admin SDK (JWT verification); phone OTP in production, any-4-digits mirror in dev |
 | **Payments** | Razorpay (order creation + webhook) |
+| **Email** | SMTP transactional mail (decisions, receipts, welcomes, alerts) |
 | **Containerisation** | Docker + docker‑compose |
-| **Testing** | pytest / httpx (backend, 220 tests) · Vitest (frontend, 171 tests) |
+| **Testing** | pytest / httpx (backend, 227 tests) · Vitest (frontend, ~180 tests) |
 | **Code quality** | black, ruff, ESLint, `tsc --noEmit` |
 
 ---
@@ -210,6 +224,29 @@ integration, including two issues that were giving away free applications.
 - Public form with purpose dropdown (admissions, join college, coaching, payments, problem, press, other)
 - Backend `/contact/` endpoint with rate limiting, validation, `/admin/contact-messages` read endpoint
 - New migration `005_contact_messages` + `contact_messages` table + admin inbox page
+- Acknowledgement email to the sender plus an optional alert to `ADMIN_EMAIL`
+
+**Student dashboard**
+- Applied applications with per-card deadlines, plus a shortlisted section with fees, deadlines and a pay CTA
+- Submission confirmations: `?paid=1` after checkout, `?welcome=1` after signup
+
+**Application windows (migration `006`)**
+- Courses carry `application_start_date` and `intake_info` alongside `closing_date`
+- Editable in the college portal and the admin portal; shown on landing pages, shortlists, dashboards and the admin detail view
+
+**Coaching bulk uploads (migration `007`)**
+- Excel/CSV template download, bulk upload (1,000 rows / 2 MB caps), email dedupe per centre and against registered students
+- Every file appends to a cumulative lead database; an optional `shortlisted` column (`College :: Course; …`) resolves into real shortlists when the lead registers
+- Outstanding amount on the coaching dashboard: leads × per-lead rate − credit, with terms set in the admin panel
+
+**College landing + admin management (migration `008`)**
+- Landing pages show deadlines, intakes, admission phases, the college logo and per-course shortlisting wired to sign-in
+- Admin college page manages courses (add / edit deadlines and fees / delete with dependency guard), admission phases and logo upload (`/uploads`, volume-backed in production)
+- Authorised-partners logo carousel below the homepage hero (renders once logos are added)
+
+**Email notifications**
+- Transactional SMTP mail after each commit, best-effort and never request-breaking: signup welcomes, application decisions, payment receipts, college new-application alerts, staff welcomes, upload summaries, contact acknowledgements
+- Empty `SMTP_HOST` disables sending (development logs instead); `PUBLIC_URL` builds the links, `ADMIN_EMAIL` receives platform alerts
 
 **Portal shell overhaul**
 - Top header only (no sidebar), emerald pine header with white text, red solid sign-out
@@ -248,9 +285,10 @@ edee/
 │  │  ├─ middleware/    # Firebase JWT auth + role/scope helpers
 │  │  ├─ models/        # ORM tables + Pydantic request/response schemas
 │  │  ├─ routers/       # auth/session, students, colleges, shortlists, payments, portals
-│  │  ├─ services/      # Razorpay client, Firebase role claims
+│  │  ├─ services/      # Razorpay client, Firebase role claims, email, lead files
+│  │  ├─ uploads/       # college logos served at /uploads (gitignored, volume-backed)
 │  │  └─ main.py        # FastAPI entry point
-│  ├─ migrations/        # Alembic 001–005
+│  ├─ migrations/        # Alembic 001–008
 │  ├─ seeds/             # colleges, demo role accounts
 │  ├─ tests/             # pytest suite
 │  ├─ Dockerfile
@@ -259,6 +297,7 @@ edee/
 │  └─ .env.example
 ├─ frontend/
 │  ├─ app/               # routes; each portal page is a server half + `*Client.tsx`
+│  ├─ components/auth/   # PhoneOTPForm (prod) + DevOTPForm (dev mirror)
 │  ├─ lib/serverApi.ts   # serverGet (as the user) / publicGet (no credential)
 │  ├─ lib/sessionCookie.ts
 │  ├─ app/auth/session/  # route handler that sets and clears the cookie
@@ -361,6 +400,10 @@ Before pointing traffic at it, work through this list:
   `https://<api-host>/payments/webhook` and set `RAZORPAY_WEBHOOK_SECRET` to
   the same secret. The handler rejects amount mismatches and replays, but it
   can only verify what you configured.
+- **Email.** Set `SMTP_HOST/PORT/USERNAME/PASSWORD/FROM` to a real relay,
+  `PUBLIC_URL` to the site origin (links inside mails), and `ADMIN_EMAIL`
+  for contact-form alerts. The `uploads-data` volume already persists
+  college logos across redeploys.
 - **Firebase.** Add the production web origin to Authorized Domains, and keep
   the service-account JSON out of git (it is ignored) and readable only by
   the backend container.
@@ -431,7 +474,24 @@ LOG_LEVEL=INFO
 # 14 days; 8 hours is the default. The frontend's two-hour idle logout is what
 # ends an unattended session sooner - this is the hard ceiling behind it.
 SESSION_MAX_AGE_SECONDS=28800
+# Public site origin, for absolute links inside emails.
+PUBLIC_URL=http://localhost:3000
+# Outbound email. Empty SMTP_HOST disables sending (development logs).
+# SMTP_HOST=smtp.example.com
+# SMTP_PORT=587
+# SMTP_USERNAME=
+# SMTP_PASSWORD=
+# SMTP_FROM=Edee Apply <no-reply@edeeapply.in>
+# SMTP_STARTTLS=true
+# ADMIN_EMAIL=ops@example.com
 ```
+
+Email is transactional and best-effort: application decisions, payment
+receipts, staff welcomes, upload summaries and contact acknowledgements go
+out over SMTP after the request commits, and a failed send never fails the
+request (the in-app notification is the durable record). Leave `SMTP_HOST`
+empty in development to log instead of sending; set `SMTP_*`, `PUBLIC_URL`
+and `ADMIN_EMAIL` in production.
 
 Frontend `.env.local` only contains publishable `NEXT_PUBLIC_*` values. Never put
 Razorpay secrets or Firebase service-account credentials there.
@@ -471,8 +531,15 @@ Payments:
 Portals:
 
 - College: `/college/dashboard`, `/college/courses/*`, `/college/applications/*`, `/college/profile`
-- Coaching: `/coaching/dashboard`, `/coaching/students/*`, `/coaching/invites`, `/coaching/profile`
-- Admin: `/admin/dashboard`, `/admin/colleges/*`, `/admin/coaching-centres`, `/admin/students`, `/admin/users`, `/admin/payments`, `/admin/audit`, `/admin/inbox`, `/admin/system` (live dependency checks for the status page)
+- Coaching: `/coaching/dashboard`, `/coaching/students/*`, `/coaching/uploads` (Excel/CSV template, bulk upload, history, cumulative leads), `/coaching/invites`, `/coaching/profile`
+- Admin: `/admin/dashboard`, `/admin/colleges/*` (courses add/edit/delete, phases, logo upload), `/admin/coaching-centres`, `/admin/students`, `/admin/users`, `/admin/payments`, `/admin/audit`, `/admin/inbox`, `/admin/system` (live dependency checks for the status page)
+
+Dev only (404 elsewhere):
+
+- `GET /dev/directory` — colleges and centres to sign in as
+- `POST /dev/mock-user` — provision mock rows behind a dev token
+- `POST /dev/mock-capture` — mock payment: real pricing and fulfillment, no money
+- `DELETE /dev/mock-user` — delete the caller's mock rows
 
 Contact & Notifications:
 

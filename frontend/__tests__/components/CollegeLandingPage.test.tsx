@@ -23,6 +23,8 @@ const landing: CollegeLanding = {
   landing_hero_image_url: 'https://img.example/hero.jpg',
   landing_description: 'A great place to study.',
   landing_gallery_urls: ['https://img.example/1.jpg', 'https://img.example/2.jpg'],
+  application_phases: 'Phase 1: Jun-Jul; Phase 2: Aug.',
+  logo_url: null,
   courses: [
     {
       id: 'crs-1',
@@ -32,6 +34,8 @@ const landing: CollegeLanding = {
       duration_years: 3,
       seats: 60,
       application_fee: 150000,
+      application_start_date: null,
+      intake_info: null,
       closing_date: null,
       active: true,
     },
@@ -43,6 +47,8 @@ const landing: CollegeLanding = {
       duration_years: 2,
       seats: 20,
       application_fee: 200000,
+      application_start_date: null,
+      intake_info: null,
       closing_date: null,
       active: false,
     },

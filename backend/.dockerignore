@@ -6,6 +6,7 @@ firebase-service-account.json
 serviceAccountKey.json
 
 # Local-only artefacts.
+uploads/
 venv/
 env/
 ENV/

@@ -16,6 +16,11 @@ import api, { apiErrorMessage } from '@/lib/api';
 import { formatFee } from '@/lib/format';
 import type { CollegeCourseDetail } from '@/lib/types';
 
+/** An ISO timestamp trims to the YYYY-MM-DD a date input expects. */
+function toDateInput(iso: string | null): string {
+  return iso ? iso.slice(0, 10) : '';
+}
+
 /**
  * `initialCourse` is the record the server already fetched with the session cookie.
  * Null means it could not - no session, or the record is gone - and this loads
@@ -35,6 +40,9 @@ export default function CourseDetailClient({
 
   const [seats, setSeats] = useState('');
   const [fee, setFee] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [closingDate, setClosingDate] = useState('');
+  const [intake, setIntake] = useState('');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -46,6 +54,9 @@ export default function CourseDetailClient({
       setSeats(String(data.seats ?? ''));
       // Fees are paise on the wire, rupees in the field a person types into.
       setFee(String(Math.round(data.application_fee / 100)));
+      setStartDate(toDateInput(data.application_start_date));
+      setClosingDate(toDateInput(data.closing_date));
+      setIntake(data.intake_info ?? '');
       setError('');
     } catch (err) {
       const status = (err as { response?: { status?: number } }).response?.status;
@@ -70,6 +81,9 @@ export default function CourseDetailClient({
     const next: Record<string, string> = {};
     if (Number(seats) < 1) next.seats = 'Seats must be at least 1.';
     if (Number(fee) < 1) next.fee = 'The application fee must be at least 1 rupee.';
+    if (startDate && closingDate && startDate > closingDate) {
+      next.window = 'Applications cannot open after they close.';
+    }
     setErrors(next);
     if (Object.keys(next).length > 0) return;
 
@@ -79,6 +93,9 @@ export default function CourseDetailClient({
       await api.patch(`/college/courses/${course.id}`, {
         seats: Number(seats),
         application_fee: Math.round(Number(fee) * 100),
+        application_start_date: startDate || null,
+        intake_info: intake.trim() || null,
+        closing_date: closingDate || null,
       });
       setSaved(true);
       await load();
@@ -214,6 +231,53 @@ export default function CourseDetailClient({
                       setFee(event.target.value);
                       setSaved(false);
                     }}
+                  />
+                )}
+              </Field>
+
+              <Field
+                label="Applications open"
+                hint="Blank means already open."
+                error={errors.window}
+              >
+                {(fieldProps) => (
+                  <Input
+                    {...fieldProps}
+                    type="date"
+                    value={startDate}
+                    onChange={(event) => {
+                      setStartDate(event.target.value);
+                      setSaved(false);
+                    }}
+                  />
+                )}
+              </Field>
+
+              <Field label="Application deadline">
+                {(fieldProps) => (
+                  <Input
+                    {...fieldProps}
+                    type="date"
+                    value={closingDate}
+                    onChange={(event) => {
+                      setClosingDate(event.target.value);
+                      setSaved(false);
+                    }}
+                  />
+                )}
+              </Field>
+
+              <Field label="Intake" hint="Free text, shown to students.">
+                {(fieldProps) => (
+                  <Input
+                    {...fieldProps}
+                    value={intake}
+                    maxLength={200}
+                    onChange={(event) => {
+                      setIntake(event.target.value);
+                      setSaved(false);
+                    }}
+                    placeholder="Fall 2027"
                   />
                 )}
               </Field>

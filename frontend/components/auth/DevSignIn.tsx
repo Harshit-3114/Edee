@@ -7,7 +7,7 @@ import Button from '@/components/ui/Button';
 import Field from '@/components/ui/Field';
 import { Input, Select } from '@/components/ui/Input';
 import { ErrorState } from '@/components/ui/States';
-import api from '@/lib/api';
+import api, { apiErrorMessage } from '@/lib/api';
 import {
   fetchBackendDevMode,
   isDevModeForced,
@@ -134,8 +134,12 @@ export default function DevSignIn() {
       }
 
       const tag = label.trim();
-      const token =
-        needsOrg || !tag ? `dev:${role}${scope ? `:${scope}` : ''}` : `dev:${role}:${tag}`;
+      const body = {
+        role,
+        tag: !needsOrg && tag ? tag : null,
+        college_id: role === 'college' ? scope : null,
+        coaching_centre_id: role === 'coaching' ? scope : null,
+      };
 
       // A real Firebase session must not shadow the dev identity (the API
       // prefers it), so leave it first. Best effort: dev continues regardless.
@@ -144,6 +148,18 @@ export default function DevSignIn() {
         if (auth?.currentUser) await fbSignOut(auth);
       } catch {
         /* dev continues regardless */
+      }
+
+      // The server provisions mock rows behind the token (a profile for a
+      // student, a staff record for a portal), so dev behaves like the real
+      // site instead of 404ing on every row-backed page.
+      let token: string;
+      try {
+        const { data } = await api.post<{ token: string }>('/dev/mock-user', body);
+        token = data.token;
+      } catch (err) {
+        setError(apiErrorMessage(err, 'Could not set up the mock user.'));
+        return;
       }
 
       const claims = setDevToken(token);

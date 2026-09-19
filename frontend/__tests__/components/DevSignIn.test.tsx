@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event';
 
 const replace = vi.fn();
 const apiGet = vi.fn();
+const apiPost = vi.fn();
 const fetchMock = vi.fn();
 
 let mockSearchParams = new URLSearchParams('');
@@ -15,7 +16,10 @@ vi.mock('next/navigation', () => ({
 }));
 
 vi.mock('@/lib/api', () => ({
-  default: { get: (...args: unknown[]) => apiGet(...args) },
+  default: {
+    get: (...args: unknown[]) => apiGet(...args),
+    post: (...args: unknown[]) => apiPost(...args),
+  },
   apiErrorMessage: (_error: unknown, fallback: string) => fallback,
 }));
 
@@ -43,6 +47,22 @@ describe('DevSignIn', () => {
     apiGet.mockReset().mockImplementation((url: unknown) => {
       if (url === '/dev/directory') return Promise.resolve({ data: directory });
       return Promise.reject(new Error(`unexpected ${String(url)}`));
+    });
+    // The server provisions mock rows and issues the token. Mirror its
+    // contract: dev:<role>[:tag-or-scope].
+    interface MockUserBody {
+      role: string;
+      tag: string | null;
+      college_id: string | null;
+      coaching_centre_id: string | null;
+    }
+    apiPost.mockReset().mockImplementation((url: unknown, body: MockUserBody) => {
+      if (url !== '/dev/mock-user') return Promise.reject(new Error(`unexpected ${String(url)}`));
+      let token = `dev:${body.role}`;
+      if (body.role === 'college') token += `:${body.college_id}`;
+      else if (body.role === 'coaching') token += `:${body.coaching_centre_id}`;
+      else if (body.tag) token += `:${body.tag}`;
+      return Promise.resolve({ data: { token } });
     });
     replace.mockReset();
     window.localStorage.clear();

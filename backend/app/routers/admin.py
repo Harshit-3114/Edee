@@ -5,7 +5,10 @@ Unscoped by design: an admin sees every college, centre and student. That makes
 this the highest-value router in the codebase, so every write appends to
 audit_events and role assignment lives here and nowhere else.
 """
-from fastapi import APIRouter, Depends, HTTPException, Query
+import os
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
@@ -18,12 +21,22 @@ from app.db.connection import get_db
 from app.middleware.auth import require_roles
 from app.services import health as health_checks
 from app.services.firebase import assign_role, revoke_access
+from app.services.email import portal_url, send_email
 from app.core.slug import is_valid_slug, make_slug
 from app.models.college import clean_gallery, dump_gallery, parse_gallery
+from app.routers.college_portal import CourseCreate, CourseUpdate
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(dependencies=[Depends(require_roles("admin"))])
+
+# College marks live here, served by the /uploads static mount in main.py.
+# Filenames are server-built ({college_id}.{ext}), never user-supplied, so no
+# crafted filename can escape the directory.
+UPLOAD_DIR = Path(os.environ.get("UPLOAD_DIR", "uploads"))
+LOGO_DIR = UPLOAD_DIR / "logos"
+LOGO_EXTS = {".png", ".jpg", ".jpeg", ".webp"}
+MAX_LOGO_BYTES = 2 * 1024 * 1024
 
 
 class CollegeCreate(BaseModel):
@@ -65,11 +78,21 @@ class CollegeUpdate(BaseModel):
     landing_hero_image_url: Optional[str] = Field(default=None, max_length=500)
     landing_description: Optional[str] = Field(default=None, max_length=2000)
     landing_gallery_urls: Optional[List[str]] = Field(default=None, max_length=10)
+    # Free-text admission rounds, shown on the public landing page.
+    application_phases: Optional[str] = Field(default=None, max_length=2000)
 
     @field_validator("landing_gallery_urls")
     @classmethod
     def _gallery(cls, value: Optional[List[str]]) -> Optional[List[str]]:
         return clean_gallery(value)
+
+    @field_validator("application_phases")
+    @classmethod
+    def _phases(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        return cleaned or None
 
 
 class CentreCreate(BaseModel):
@@ -78,10 +101,17 @@ class CentreCreate(BaseModel):
     state: str = Field(min_length=1, max_length=80)
     contact_email: EmailStr
     contact_phone: Optional[str] = Field(default=None, max_length=20)
+    # Paise charged per submitted lead. Zero means the commercial terms are
+    # not set yet, and the dashboard shows no outstanding amount.
+    amount_per_lead: int = Field(default=0, ge=0, le=10_000_000)
 
 
 class CentreUpdate(BaseModel):
     active: Optional[bool] = None
+    amount_per_lead: Optional[int] = Field(default=None, ge=0, le=10_000_000)
+    # Payments and waivers the platform extends. Subtracted from the derived
+    # outstanding, so credit stays visible instead of silently shrinking leads.
+    credit_paise: Optional[int] = Field(default=None, ge=0, le=1_000_000_000)
 
 
 class UserCreate(BaseModel):
@@ -216,7 +246,7 @@ async def get_college(college_id: UUID, db: AsyncSession = Depends(get_db)):
             """
             SELECT c.id, c.name, c.slug, c.location, c.city, c.state, c.type, c.active,
                    c.landing_hero_image_url, c.landing_description,
-                   c.landing_gallery_urls,
+                   c.landing_gallery_urls, c.application_phases, c.logo_url,
                    COALESCE(
                        json_agg(
                            json_build_object(
@@ -226,6 +256,8 @@ async def get_college(college_id: UUID, db: AsyncSession = Depends(get_db)):
                                'seats', cc.seats,
                                 'application_fee', cc.application_fee * 100,
                                 'active', cc.active,
+                                'application_start_date', cc.application_start_date,
+                                'intake_info', cc.intake_info,
                                 'closing_date', cc.closing_date
                            ) ORDER BY cc.course_name
                        ) FILTER (WHERE cc.id IS NOT NULL), '[]'
@@ -282,6 +314,7 @@ async def update_college(
         "landing_hero_image_url",
         "landing_description",
         "landing_gallery_urls",
+        "application_phases",
     )
     fields = [k for k in allowed if k in updates]
     if "landing_gallery_urls" in updates:
@@ -300,12 +333,193 @@ async def update_college(
     return {"status": "updated"}
 
 
+@router.post("/colleges/{college_id}/courses", status_code=201)
+async def admin_create_course(
+    college_id: UUID, body: CourseCreate, db: AsyncSession = Depends(get_db)
+):
+    """
+    An admin adds a course exactly as the college would: same shape, same
+    window validation, same paise convention. The college portal owns the
+    day-to-day; this exists for onboarding and correction.
+    """
+    exists = await db.execute(
+        text("SELECT 1 FROM colleges WHERE id = :cid"), {"cid": college_id}
+    )
+    if not exists.fetchone():
+        raise HTTPException(status_code=404, detail="College not found")
+    if (
+        body.application_start_date
+        and body.closing_date
+        and body.application_start_date > body.closing_date
+    ):
+        raise HTTPException(
+            status_code=422, detail="The application window cannot open after it closes"
+        )
+    course_id = uuid4()
+    await db.execute(
+        text(
+            """
+            INSERT INTO college_courses
+                (id, college_id, course_name, stream, duration_years, seats,
+                 application_fee, application_start_date, intake_info,
+                 closing_date, active)
+            VALUES (:id, :cid, :name, :stream, :duration, :seats, :fee,
+                    :start_date, :intake, :closing_date, true)
+            """
+        ),
+        {
+            "id": course_id,
+            "cid": college_id,
+            "name": body.course_name.strip(),
+            "stream": body.stream,
+            "duration": body.duration_years,
+            "seats": body.seats,
+            "fee": body.application_fee // 100,
+            "start_date": body.application_start_date,
+            "intake": body.intake_info,
+            "closing_date": body.closing_date,
+        },
+    )
+    await _audit(db, "course.created", "course", course_id)
+    await db.commit()
+    return {"id": str(course_id)}
+
+
+@router.patch("/colleges/{college_id}/courses/{course_id}")
+async def admin_update_course(
+    college_id: UUID,
+    course_id: UUID,
+    body: CourseUpdate,
+    db: AsyncSession = Depends(get_db),
+):
+    updates = body.model_dump(exclude_none=True)
+    if not updates:
+        raise HTTPException(status_code=400, detail="Nothing to update")
+    if "application_fee" in updates:
+        updates["application_fee"] //= 100
+
+    allowed = (
+        "seats",
+        "application_fee",
+        "application_start_date",
+        "intake_info",
+        "closing_date",
+        "active",
+    )
+    fields = [k for k in allowed if k in updates]
+    if not fields:
+        raise HTTPException(status_code=400, detail="Nothing to update")
+    assignments = ", ".join(f"{k} = :{k}" for k in fields)
+
+    result = await db.execute(
+        text(
+            f"""
+            UPDATE college_courses SET {assignments}
+            WHERE id = :course_id AND college_id = :cid
+            RETURNING id
+            """
+        ),
+        {**{k: updates[k] for k in fields}, "course_id": course_id, "cid": college_id},
+    )
+    if not result.fetchone():
+        await db.rollback()
+        raise HTTPException(status_code=404, detail="Course not found")
+    await _audit(db, "course.updated", "course", course_id)
+    await db.commit()
+    return {"status": "updated"}
+
+
+@router.delete("/colleges/{college_id}/courses/{course_id}", status_code=204)
+async def admin_delete_course(
+    college_id: UUID, course_id: UUID, db: AsyncSession = Depends(get_db)
+):
+    """
+    Remove a course outright. Refused when anything references it - an
+    application, a shortlist entry, a priced order item - because deleting
+    those would rewrite history. Deactivate (PATCH active=false) instead:
+    the course disappears from every listing while its records stay intact.
+    """
+    dependents = await db.execute(
+        text(
+            """
+            SELECT (SELECT count(*) FROM applications WHERE course_id = :course)
+                 + (SELECT count(*) FROM shortlists WHERE course_id = :course)
+                 + (SELECT count(*) FROM order_items WHERE course_id = :course)
+            """
+        ),
+        {"course": course_id},
+    )
+    if (dependents.scalar_one() or 0) > 0:
+        raise HTTPException(
+            status_code=409,
+            detail="This course has applications or shortlists. "
+            "Deactivate it instead of deleting it.",
+        )
+    result = await db.execute(
+        text(
+            "DELETE FROM college_courses WHERE id = :course_id AND college_id = :cid"
+        ),
+        {"course_id": course_id, "cid": college_id},
+    )
+    if result.rowcount == 0:
+        await db.rollback()
+        raise HTTPException(status_code=404, detail="Course not found")
+    await _audit(db, "course.deleted", "course", course_id)
+    await db.commit()
+
+
+@router.post("/colleges/{college_id}/logo")
+async def upload_college_logo(
+    college_id: UUID,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Set the college mark shown on the landing page and listings.
+
+    PNG, JPG or WebP under 2 MB. Stored on local disk under /uploads and
+    served by the backend itself - no object storage to configure for a
+    handful of logos, at the cost of a volume in production compose.
+    """
+    exists = await db.execute(
+        text("SELECT 1 FROM colleges WHERE id = :cid"), {"cid": college_id}
+    )
+    if not exists.fetchone():
+        raise HTTPException(status_code=404, detail="College not found")
+
+    ext = Path(file.filename or "").suffix.lower()
+    if ext not in LOGO_EXTS:
+        raise HTTPException(
+            status_code=422, detail="Upload a PNG, JPG or WebP image."
+        )
+    raw = await file.read()
+    if len(raw) > MAX_LOGO_BYTES:
+        raise HTTPException(status_code=413, detail="Keep logos under 2 MB.")
+
+    LOGO_DIR.mkdir(parents=True, exist_ok=True)
+    for old in LOGO_DIR.glob(f"{college_id}.*"):
+        old.unlink()
+    destination = LOGO_DIR / f"{college_id}{ext}"
+    destination.write_bytes(raw)
+
+    logo_url = f"/uploads/logos/{college_id}{ext}"
+    await db.execute(
+        text("UPDATE colleges SET logo_url = :url WHERE id = :cid"),
+        {"url": logo_url, "cid": college_id},
+    )
+    await _audit(db, "college.logo_updated", "college", college_id)
+    await db.commit()
+    logger.info("college logo updated id=%s size=%d", college_id, len(raw))
+    return {"logo_url": logo_url}
+
+
 @router.get("/coaching-centres")
 async def list_centres(db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         text(
             """
             SELECT cc.id, cc.name, cc.city, cc.state, cc.active, cc.created_at,
+                   cc.amount_per_lead, cc.credit_paise,
                    COALESCE(a.email, '') AS contact_email,
                    ''                    AS contact_phone,
                    (SELECT count(*) FROM student_coaching_links l
@@ -327,8 +541,8 @@ async def create_centre(body: CentreCreate, db: AsyncSession = Depends(get_db)):
     await db.execute(
         text(
             """
-            INSERT INTO coaching_centers (id, name, city, state, active)
-            VALUES (:id, :name, :city, :state, true)
+            INSERT INTO coaching_centers (id, name, city, state, active, amount_per_lead)
+            VALUES (:id, :name, :city, :state, true, :rate)
             """
         ),
         {
@@ -336,6 +550,7 @@ async def create_centre(body: CentreCreate, db: AsyncSession = Depends(get_db)):
             "name": body.name,
             "city": body.city,
             "state": body.state,
+            "rate": body.amount_per_lead,
         },
     )
     await _audit(db, "coaching_centre.created", "coaching_centre", centre_id)
@@ -347,11 +562,17 @@ async def create_centre(body: CentreCreate, db: AsyncSession = Depends(get_db)):
 async def update_centre(
     centre_id: UUID, body: CentreUpdate, db: AsyncSession = Depends(get_db)
 ):
-    if body.active is None:
+    updates = body.model_dump(exclude_none=True)
+    if not updates:
         raise HTTPException(status_code=400, detail="Nothing to update")
+    allowed = ("active", "amount_per_lead", "credit_paise")
+    fields = [k for k in allowed if k in updates]
+    if not fields:
+        raise HTTPException(status_code=400, detail="Nothing to update")
+    assignments = ", ".join(f"{k} = :{k}" for k in fields)
     result = await db.execute(
-        text("UPDATE coaching_centers SET active = :active WHERE id = :cid RETURNING id"),
-        {"active": body.active, "cid": centre_id},
+        text(f"UPDATE coaching_centers SET {assignments} WHERE id = :cid RETURNING id"),
+        {**{k: updates[k] for k in fields}, "cid": centre_id},
     )
     if not result.fetchone():
         await db.rollback()
@@ -514,6 +735,20 @@ async def create_user(body: UserCreate, db: AsyncSession = Depends(get_db)):
     await _audit(db, f"user.created.{body.role}", "user", user_id)
     await db.commit()
     logger.info("staff account created role=%s id=%s", body.role, user_id)
+    portal_path = {
+        "college": "/college/dashboard",
+        "coaching": "/coaching/dashboard",
+        "admin": "/admin/dashboard",
+    }[body.role]
+    await send_email(
+        email,
+        f"Your {body.role} account on Edee Apply is ready",
+        f"Hi {body.name},\n\n"
+        "An administrator created your account. Sign in with this email "
+        "address, then open your portal:\n"
+        f"{portal_url(portal_path)}",
+        purpose="staff-welcome",
+    )
     return {"id": str(user_id), "email": email}
 
 

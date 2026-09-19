@@ -292,8 +292,23 @@
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  *,
+/* Partner logo marquee. The list is rendered twice and translated half its
+   own width, so the loop has no seam. Distance in % keeps it correct at any
+   list length. The global reduced-motion rule above stills it. */
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-marquee {
+  animation: marquee 40s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {  *,
   *::before,
   *::after {
     animation-duration: 0.01ms !important;

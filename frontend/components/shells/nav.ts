@@ -25,6 +25,7 @@ export const PORTAL_NAV: Record<Role, NavItem[]> = {
   coaching: [
     { href: '/coaching/dashboard', label: 'Overview' },
     { href: '/coaching/students', label: 'My students' },
+    { href: '/coaching/uploads', label: 'Upload students' },
     { href: '/coaching/invite', label: 'Invite codes' },
     { href: '/coaching/profile', label: 'Centre profile' },
   ],

@@ -12,7 +12,9 @@ from uuid import uuid4
 import logging
 
 from app.db.connection import get_db
+from app.core.config import settings
 from app.core.rate_limit import limited
+from app.services.email import portal_url, send_email
 
 router = APIRouter()
 
@@ -51,4 +53,22 @@ async def create_message(
     )
     await db.commit()
     logger.info("contact message received id=%s purpose=%s", message_id, body.purpose)
+    await send_email(
+        body.email.lower().strip(),
+        "We received your message",
+        f"Hi {body.name.strip()},\n\n"
+        "Thanks for writing to Edee Apply. Our team reads every message and "
+        "will get back to you on this address.",
+        purpose="contact-ack",
+    )
+    if settings.ADMIN_EMAIL:
+        await send_email(
+            settings.ADMIN_EMAIL,
+            f"New contact message: {body.purpose.strip()}",
+            f"From: {body.name.strip()} <{body.email.lower().strip()}>\n"
+            f"Purpose: {body.purpose.strip()}\n\n"
+            f"{body.message.strip()}\n\n"
+            f"Read it in the inbox:\n{portal_url('/admin/inbox')}",
+            purpose="contact-alert",
+        )
     return {"id": str(message_id)}

@@ -12,6 +12,7 @@ import {
 } from '@phosphor-icons/react/dist/ssr';
 import LinkButton from '@/components/ui/LinkButton';
 import Reveal from '@/components/ui/Reveal';
+import PartnerCarousel from './_components/PartnerCarousel';
 import SiteFooter from './_components/SiteFooter';
 import SiteHeader from './_components/SiteHeader';
 import { FAQS } from './_components/faqs';
@@ -143,6 +144,8 @@ export default function LandingPage() {
             </div>
           </section>
         </div>
+
+        <PartnerCarousel />
 
         <section
           id="how-it-works"

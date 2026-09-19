@@ -92,24 +92,28 @@ async def list_colleges(
                    c.state,
                    c.type,
                    c.active,
+                   c.application_phases,
+                   c.logo_url,
                    COALESCE(
-                       json_agg(
-                           json_build_object(
-                               'id', cc.id,
-                               'college_id', c.id,
-                               'course_name', cc.course_name,
+                        json_agg(
+                            json_build_object(
+                                'id', cc.id,
+                                'college_id', c.id,
+                                'course_name', cc.course_name,
                                'stream', cc.stream,
                                'duration_years', cc.duration_years,
                                'seats', cc.seats,
                                 'application_fee', cc.application_fee * 100,
                                 'active', cc.active,
+                                'application_start_date', cc.application_start_date,
+                                'intake_info', cc.intake_info,
                                 'closing_date', cc.closing_date
-                           )
-                           ORDER BY cc.course_name
-                       ) FILTER (WHERE cc.id IS NOT NULL),
-                       '[]'
-                   ) AS courses
-            FROM page
+                            )
+                            ORDER BY cc.course_name
+                        ) FILTER (WHERE cc.id IS NOT NULL),
+                        '[]'
+                    ) AS courses
+             FROM page
             JOIN colleges c ON c.id = page.id
             LEFT JOIN college_courses cc
                    ON cc.college_id = c.id AND cc.active = true {course_stream}
@@ -141,9 +145,13 @@ async def get_college(
                    c.state,
                    c.type,
                    c.active,
+                   c.application_phases,
+                   c.logo_url,
                    c.landing_hero_image_url,
                    c.landing_description,
                    c.landing_gallery_urls,
+                   c.application_phases,
+                   c.logo_url,
                    COALESCE(
                        json_agg(
                            json_build_object(
@@ -155,16 +163,18 @@ async def get_college(
                                'seats', cc.seats,
                                 'application_fee', cc.application_fee * 100,
                                 'active', cc.active,
+                                'application_start_date', cc.application_start_date,
+                                'intake_info', cc.intake_info,
                                 'closing_date', cc.closing_date
-                           )
-                           ORDER BY cc.course_name
-                       ) FILTER (WHERE cc.id IS NOT NULL),
-                       '[]'
-                   ) AS courses
-            FROM colleges c
-            LEFT JOIN college_courses cc
-                   ON cc.college_id = c.id AND cc.active = true
-            WHERE c.id = :college_id AND c.active = true
+                            )
+                            ORDER BY cc.course_name
+                        ) FILTER (WHERE cc.id IS NOT NULL),
+                        '[]'
+                    ) AS courses
+             FROM colleges c
+             LEFT JOIN college_courses cc
+                    ON cc.college_id = c.id AND cc.active = true
+             WHERE c.id = :college_id AND c.active = true
             GROUP BY c.id
             """
         ),
@@ -214,6 +224,8 @@ async def get_college_by_slug(
                    c.landing_hero_image_url,
                    c.landing_description,
                    c.landing_gallery_urls,
+                   c.application_phases,
+                   c.logo_url,
                    COALESCE(
                        json_agg(
                            json_build_object(
@@ -225,16 +237,18 @@ async def get_college_by_slug(
                                'seats', cc.seats,
                                 'application_fee', cc.application_fee * 100,
                                 'active', cc.active,
+                                'application_start_date', cc.application_start_date,
+                                'intake_info', cc.intake_info,
                                 'closing_date', cc.closing_date
-                           )
-                           ORDER BY cc.course_name
-                       ) FILTER (WHERE cc.id IS NOT NULL),
-                       '[]'
-                   ) AS courses
-            FROM colleges c
-            LEFT JOIN college_courses cc
-                   ON cc.college_id = c.id AND cc.active = true
-            WHERE c.slug = :slug AND c.active = true
+                            )
+                            ORDER BY cc.course_name
+                        ) FILTER (WHERE cc.id IS NOT NULL),
+                        '[]'
+                    ) AS courses
+             FROM colleges c
+             LEFT JOIN college_courses cc
+                    ON cc.college_id = c.id AND cc.active = true
+             WHERE c.slug = :slug AND c.active = true
             GROUP BY c.id
             """
         ),

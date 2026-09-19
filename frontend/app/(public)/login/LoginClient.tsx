@@ -13,6 +13,7 @@ import {
 } from '@phosphor-icons/react/dist/ssr';
 import GoogleSignIn from '@/components/auth/GoogleSignIn';
 import DevSignIn, { useDevBypass } from '@/components/auth/DevSignIn';
+import DevOTPForm from '@/components/auth/DevOTPForm';
 import SiteFooter from '../_components/SiteFooter';
 import SiteHeader from '../_components/SiteHeader';
 import PhoneOTPForm from '@/components/auth/PhoneOTPForm';
@@ -183,7 +184,17 @@ function LoginForm() {
           <Skeleton className="h-10 w-full" />
         </div>
       ) : devBypass ? (
-        <DevSignIn />
+        // Students sign in the way the site works in production - phone
+        // number plus a short code - except dev accepts any 4 digits and no
+        // SMS leaves the laptop. Staff portals keep the directory picker.
+        portal === 'student' ? (
+          <DevOTPForm
+            onSuccess={() => void router.replace(next ?? '/student/dashboard?welcome=1')}
+            onError={setError}
+          />
+        ) : (
+          <DevSignIn />
+        )
       ) : (
         <>
           <PhoneOTPForm onSuccess={route} onError={setError} />

@@ -4,6 +4,7 @@ from sqlalchemy import text
 from app.db.connection import get_db
 from app.middleware.auth import require_roles
 from app.services.notify import notify
+from app.services.email import portal_url, send_email
 from app.models.payment import (
     CreateOrder,
     CreateOrderResponse,
@@ -26,11 +27,16 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 MAX_ITEMS_PER_ORDER = 25
-
 # Paise of scholarship per extra form once an order outgrows the slab table.
 # Matches the launch policy (the 6-form slab is exactly 6 x 500); the table
 # stays the source of truth up to its largest row.
 PER_FORM_BEYOND_SLABS = 50_000
+
+
+def format_amount(paise: int) -> str:
+    """Receipt-friendly rupees for email bodies. The API speaks paise;
+    humans do not."""
+    return f"₹{paise / 100:,.0f}"
 
 
 async def scholarship_for_count(db: AsyncSession, count: int) -> int:
@@ -407,6 +413,42 @@ async def razorpay_webhook(
         )
         return {"status": "amount_mismatch"}
 
+    summary = await fulfill_order(
+        db, order, razorpay_payment_id, signature, paid_amount
+    )
+    if summary.get("status") == "no_order_items":
+        return summary
+
+    await db.commit()
+    logger.info(
+        "webhook captured order=%s payment=%s applications=%d",
+        razorpay_order_id,
+        razorpay_payment_id,
+        summary["applications"],
+    )
+    await send_capture_emails(
+        summary["student"],
+        summary["colleges"],
+        summary["applications"],
+        paid_amount,
+    )
+    return {"status": "ok", "applications": summary["applications"]}
+
+async def fulfill_order(
+    db: AsyncSession,
+    order,
+    razorpay_payment_id: str,
+    signature: str,
+    paid_amount: int,
+) -> dict:
+    """
+    Turn a paid order into applications, audit rows and notifications.
+
+    Shared by the Razorpay webhook (real money) and the dev mock-capture
+    (no money): both must produce exactly the same records, so there is one
+    function that does it. Writes join the caller's transaction; emails are
+    the caller's job, after commit. Returns the summary the caller reports.
+    """
     payment_id = uuid.uuid4()
     await db.execute(
         text(
@@ -480,12 +522,14 @@ async def razorpay_webhook(
     # with no admin row yet simply gets no notification; the inbox is still
     # correct when someone signs up later.
     seen_colleges = {row.college_id for row in rows}
+    college_mails: list = []
     for college_id in seen_colleges:
         names = await db.execute(
             text(
                 """
                 SELECT c.name AS college_name,
-                       ca.firebase_uid AS admin_uid
+                       ca.firebase_uid AS admin_uid,
+                       ca.email AS admin_email
                 FROM colleges c
                 LEFT JOIN college_admins ca ON ca.college_id = c.id
                 WHERE c.id = :cid
@@ -505,8 +549,10 @@ async def razorpay_webhook(
                 "A student paid the application fee. Review it in your inbox.",
                 "/college/applications",
             )
+            if name.admin_email:
+                college_mails.append((name.admin_email, name.college_name))
     student_uid = await db.execute(
-        text("SELECT firebase_uid FROM students WHERE id = :sid"),
+        text("SELECT firebase_uid, email, name FROM students WHERE id = :sid"),
         {"sid": order.student_id},
     )
     uid_row = student_uid.fetchone()
@@ -522,11 +568,39 @@ async def razorpay_webhook(
             "/student/dashboard?paid=1",
         )
 
-    await db.commit()
-    logger.info(
-        "webhook captured order=%s payment=%s applications=%d",
-        razorpay_order_id,
-        razorpay_payment_id,
-        len(rows),
-    )
-    return {"status": "ok", "applications": len(rows)}
+    return {
+        "applications": len(rows),
+        "student": (
+            {"email": uid_row.email, "name": uid_row.name}
+            if uid_row is not None
+            else None
+        ),
+        "colleges": college_mails,
+    }
+
+
+async def send_capture_emails(
+    student: dict | None, colleges: list, applications: int, paid_amount: int
+) -> None:
+    """Receipt to the payer, alert to each college. Best-effort, post-commit."""
+    if student is not None:
+        await send_email(
+            student["email"],
+            f"Payment received: {applications} application"
+            f"{'s' if applications != 1 else ''} filed",
+            f"Hi {student['name']},\n\n"
+            f"We received {format_amount(paid_amount)} for {applications} "
+            f"application{'s' if applications != 1 else ''}. "
+            "The colleges have your application now.\n\n"
+            f"Track each one here:\n{portal_url('/student/dashboard?paid=1')}",
+            purpose="payment-receipt",
+        )
+    for admin_email, college_name in colleges:
+        await send_email(
+            admin_email,
+            f"New paid application for {college_name}",
+            "A student paid the application fee. "
+            "Review it in your inbox:\n"
+            f"{portal_url('/college/applications')}",
+            purpose="new-application",
+        )

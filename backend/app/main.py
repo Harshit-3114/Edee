@@ -1,11 +1,14 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 from slowapi.errors import RateLimitExceeded
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 import logging
+import os
 import time
+from pathlib import Path
 
 from app.core.config import settings
 from app.core.devmode import firebase_available, is_dev_mode, log_dev_mode_once
@@ -52,6 +55,17 @@ async def lifespan(app: FastAPI):
         log_dev_mode_once()
     await init_db()
     yield
+    # Mock users are process-scoped by design: a mock identity must never
+    # survive the server that made it, or next boot inherits stale rows.
+    if is_dev_mode():
+        from app.routers.dev import cleanup_all_mock_users
+
+        try:
+            removed = await cleanup_all_mock_users()
+            if removed:
+                logger.info("dev shutdown: removed %d mock user(s)", removed)
+        except Exception:
+            logger.exception("dev shutdown cleanup failed")
 
 
 app = FastAPI(
@@ -64,6 +78,12 @@ app = FastAPI(
     redoc_url=None if settings.is_production else "/redoc",
     openapi_url=None if settings.is_production else "/openapi.json",
 )
+
+# Uploaded files (college logos). Created at boot so the mount never fails on
+# a fresh checkout; gitignored and volume-backed in production compose.
+UPLOAD_DIR = Path(os.environ.get("UPLOAD_DIR", "uploads"))
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
 app.add_middleware(
     CORSMiddleware,

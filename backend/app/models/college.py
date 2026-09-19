@@ -51,6 +51,8 @@ class CollegeCourseResponse(BaseModel):
     duration_years: Optional[int]
     seats: Optional[int]
     application_fee: int
+    application_start_date: Optional[datetime] = None
+    intake_info: Optional[str] = None
     closing_date: Optional[datetime] = None
 
 

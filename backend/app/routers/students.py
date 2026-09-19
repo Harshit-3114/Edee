@@ -10,6 +10,8 @@ from app.models.student import (
     StudentUpdate,
 )
 from app.services.firebase import assign_role
+from app.services.leads import apply_interests
+from app.services.email import portal_url, send_email
 from app.core.rate_limit import limited
 from uuid import UUID
 import uuid
@@ -124,6 +126,41 @@ async def create_student(
                 detail="That invite code is not valid or has already been used up",
             )
 
+        # A bulk-uploaded lead who registers graduates to signed_up, so the
+        # institute's cumulative database reflects reality instead of going
+        # stale the moment a lead converts.
+        await db.execute(
+            text(
+                """
+                UPDATE coaching_students cs
+                SET status = 'signed_up', student_id = :student_id
+                FROM coaching_invites ci
+                WHERE ci.code = :code
+                  AND ci.coaching_center_id = cs.coaching_center_id
+                  AND cs.email = :email
+                """
+            ),
+            {"code": body.invite_code, "student_id": student_id, "email": email},
+        )
+
+        # Whatever the institute shortlisted on the lead's behalf becomes real
+        # shortlists now that a student exists to own them. Best effort:
+        # unknown or closed courses are skipped, never errors.
+        lead = await db.execute(
+            text(
+                """
+                SELECT cs.interests FROM coaching_students cs
+                JOIN coaching_invites ci
+                  ON ci.coaching_center_id = cs.coaching_center_id
+                WHERE ci.code = :code AND cs.email = :email
+                """
+            ),
+            {"code": body.invite_code, "email": email},
+        )
+        lead_row = lead.fetchone()
+        if lead_row is not None and lead_row[0]:
+            await apply_interests(db, student_id, lead_row[0])
+
     await db.commit()
 
     logger.info(
@@ -131,6 +168,14 @@ async def create_student(
         student_id,
         body.stream,
         bool(body.invite_code),
+    )
+    await send_email(
+        email,
+        "Your Edee Apply profile is ready",
+        f"Hi {body.name.strip()},\n\n"
+        "Your profile is created. Shortlist the courses you want and pay "
+        f"once for all of them:\n{portal_url('/student/colleges')}",
+        purpose="signup",
     )
     return {"id": student_id, "name": body.name.strip(), "stream": body.stream}
 
@@ -229,6 +274,7 @@ async def my_applications(
                    a.status,
                    a.status_note,
                    COALESCE(oi.amount, cc.application_fee * 100) AS amount,
+                   cc.closing_date,
                    a.created_at,
                    a.updated_at
             FROM applications a

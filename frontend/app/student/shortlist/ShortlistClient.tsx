@@ -8,7 +8,7 @@ import LinkButton from '@/components/ui/LinkButton';
 import { EmptyState, ErrorState, LoadingList } from '@/components/ui/States';
 import { useShortlist } from '@/hooks/useShortlist';
 import type { ShortlistEntry } from '@/lib/types';
-import { formatFee, pluralise } from '@/lib/format';
+import { formatDate, formatFee, pluralise } from '@/lib/format';
 
 /**
  * `initialEntries` is the shortlist the server already fetched with the
@@ -57,6 +57,10 @@ export default function ShortlistClient({
                   <p className="text-sm font-medium">{entry.college_name}</p>
                   <p className="mt-0.5 text-[13px] text-[var(--text-secondary)]">
                     {entry.course_name} · {entry.city}, {entry.state}
+                    {entry.intake_info ? ` · ${entry.intake_info}` : ''} ·{' '}
+                    {entry.closing_date
+                      ? `deadline ${formatDate(entry.closing_date)}`
+                      : 'no deadline'}
                   </p>
                 </div>
 

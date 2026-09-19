@@ -39,13 +39,16 @@ export function Td({
   children,
   numeric = false,
   className = '',
+  colSpan,
 }: {
   children: React.ReactNode;
   numeric?: boolean;
   className?: string;
+  colSpan?: number;
 }) {
   return (
     <td
+      colSpan={colSpan}
       className={`border-b border-[var(--line)] px-4 py-3 align-middle ${
         numeric ? 'text-right tabular' : 'text-left'
       } ${className}`}

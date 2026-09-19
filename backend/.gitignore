@@ -14,6 +14,9 @@ firebase-service-account.json
 *-service-account.json
 serviceAccountKey.json
 
+# Uploaded files (college logos). Served from disk, never committed.
+uploads/
+
 # IDE
 .vscode/
 .idea/

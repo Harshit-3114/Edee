@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { onAuthStateChanged, signOut as fbSignOut, type User } from 'firebase/auth';
 import { tryGetFirebaseAuth } from '@/lib/firebase';
-import { clearDevToken } from '@/lib/devSession';
+import { clearDevToken, getDevToken } from '@/lib/devSession';
 import { clearSessionCookie } from '@/lib/session';
 import { endServerSession } from '@/lib/clientSession';
 
@@ -31,6 +31,17 @@ export function useAuth() {
     await endServerSession();
     const auth = tryGetFirebaseAuth();
     if (auth) await fbSignOut(auth);
+    // A mock identity's rows die with its session: in dev mode the backend
+    // deletes whatever the dev token created. Skipped without a dev token,
+    // so real sessions never pay for a request that would 404 anyway.
+    if (getDevToken()) {
+      try {
+        const { default: api } = await import('@/lib/api');
+        await api.delete('/dev/mock-user');
+      } catch {
+        /* the rows are also swept at server shutdown */
+      }
+    }
     clearDevToken();
     clearSessionCookie();
     // Whatever this account read stays in memory until it is dropped, and the

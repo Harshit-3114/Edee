@@ -146,6 +146,46 @@ class TestStudents:
         auth_as("uid-no-profile", role="student")
         assert (await client.get("/students/me")).status_code == 404
 
+    async def test_my_applications_carries_the_course_deadline(
+        self, client: AsyncClient, auth_as, db_session, seed_college
+    ):
+        """The dashboard shows each application's deadline, so the API must send it."""
+        await db_session.execute(
+            text(
+                "UPDATE college_courses SET closing_date = '2027-03-31T23:59:59+00:00' "
+                "WHERE id = :cid"
+            ),
+            {"cid": seed_college["course_id"]},
+        )
+        student_id = uuid.uuid4()
+        await db_session.execute(
+            text(
+                "INSERT INTO students (id, firebase_uid, name, email, phone, stream) "
+                "VALUES (:sid, 'uid-deadline', 'Deadline Person', "
+                "'deadline@example.com', '9876500006', 'UG')"
+            ),
+            {"sid": student_id},
+        )
+        await db_session.execute(
+            text(
+                "INSERT INTO applications (id, student_id, college_id, course_id, status) "
+                "VALUES (:aid, :sid, :cid, :course, 'payment_received')"
+            ),
+            {
+                "aid": uuid.uuid4(),
+                "sid": student_id,
+                "cid": seed_college["college_id"],
+                "course": seed_college["course_id"],
+            },
+        )
+        await db_session.commit()
+
+        auth_as("uid-deadline", role="student")
+        response = await client.get("/students/me/applications")
+        assert response.status_code == 200
+        (application,) = response.json()
+        assert application["closing_date"].startswith("2027-03-31")
+
     async def test_signup_redeems_a_coaching_invite(
         self, client: AsyncClient, auth_as, db_session
     ):

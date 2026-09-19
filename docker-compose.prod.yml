@@ -30,6 +30,11 @@ services:
         source: ./backend/firebase-service-account.json
         target: /app/firebase-service-account.json
         read_only: true
+      # Uploaded college logos live on disk; without this they vanish on
+      # every redeploy.
+      - type: volume
+        source: uploads-data
+        target: /app/uploads
     # No --reload here (the dev command is replaced). To scale past one
     # worker, extend this command with --workers N; each worker owns its own
     # small pool (see app/db/connection.py), so size Postgres accordingly.
@@ -89,3 +94,6 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+
+volumes:
+  uploads-data:

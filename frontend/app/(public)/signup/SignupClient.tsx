@@ -86,12 +86,13 @@ export default function SignupClient() {
         invite_code: inviteCode.trim() || null,
       });
       // The backend just granted the student claim. Refresh so middleware and
-      // RoleGate can both see it, then go to the portal.
+      // RoleGate can both see it, then go to the portal. The welcome flag
+      // makes the dashboard confirm the new profile instead of landing flat.
       await syncSessionCookie(user);
       // The backend granted the student claim a moment ago, so the session
       // minted here carries it.
       await startServerSession();
-      router.replace('/student/dashboard');
+      router.replace('/student/dashboard?welcome=1');
     } catch (err) {
       setFormError(apiErrorMessage(err, 'Could not create your profile.'));
     } finally {

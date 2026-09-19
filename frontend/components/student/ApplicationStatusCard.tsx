@@ -66,6 +66,12 @@ export default function ApplicationStatusCard({
           <dd className="mt-0.5">{formatDate(application.created_at)}</dd>
         </div>
         <div>
+          <dt className="text-[var(--text-muted)]">Deadline</dt>
+          <dd className="mt-0.5">
+            {application.closing_date ? formatDate(application.closing_date) : 'No deadline'}
+          </dd>
+        </div>
+        <div>
           <dt className="text-[var(--text-muted)]">Last update</dt>
           <dd className="mt-0.5">{formatDate(application.updated_at)}</dd>
         </div>

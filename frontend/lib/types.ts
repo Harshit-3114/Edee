@@ -11,6 +11,10 @@ export interface Course {
   seats: number | null;
   /** Paise. Always divide by 100 for display - see lib/format.ts. */
   application_fee: number;
+  /** ISO timestamp, or null when applications are already open. */
+  application_start_date: string | null;
+  /** Free text, e.g. "Fall 2027". Null when the college sets none. */
+  intake_info: string | null;
   /** ISO timestamp, or null when applications stay open indefinitely. */
   closing_date: string | null;
   active: boolean;
@@ -30,6 +34,10 @@ export interface College {
   landing_hero_image_url?: string | null;
   landing_description?: string | null;
   landing_gallery_urls?: string[] | null;
+  /** Free-text admission rounds, edited in the admin portal. */
+  application_phases?: string | null;
+  /** Backend-served path (e.g. /uploads/logos/…) or absolute URL. */
+  logo_url?: string | null;
 }
 
 /** What GET /colleges/by-slug/:slug returns. Always complete. */
@@ -44,6 +52,10 @@ export interface CollegeLanding {
   landing_hero_image_url: string | null;
   landing_description: string | null;
   landing_gallery_urls: string[] | null;
+  /** Free-text admission rounds, edited in the admin portal. */
+  application_phases: string | null;
+  /** Backend-served path (e.g. /uploads/logos/…) or absolute URL. */
+  logo_url: string | null;
   courses: Course[];
 }
 
@@ -68,6 +80,10 @@ export interface ShortlistEntry {
   state: string;
   stream: Stream;
   application_fee: number;
+  /** ISO timestamp, or null when applications are already open. */
+  application_start_date: string | null;
+  /** Free text, e.g. "Fall 2027". Null when the college sets none. */
+  intake_info: string | null;
   /** ISO timestamp, or null when applications stay open indefinitely. */
   closing_date: string | null;
   created_at: string;
@@ -90,6 +106,8 @@ export interface Application {
   status: ApplicationStatus;
   status_note: string | null;
   amount: number;
+  /** ISO timestamp of the course deadline, or null when open indefinitely. */
+  closing_date: string | null;
   created_at: string;
   updated_at: string;
 }

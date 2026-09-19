@@ -46,6 +46,11 @@ class College(Base):
     landing_hero_image_url = Column(Text)
     landing_description = Column(Text)
     landing_gallery_urls = Column(JSONB)
+    # Free-text admission rounds, edited in the admin portal and shown on
+    # the public landing page.
+    application_phases = Column(Text)
+    # College mark uploaded through the admin portal.
+    logo_url = Column(Text)
     active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), default=_utcnow, server_default=func.now())
 
@@ -69,6 +74,12 @@ class CollegeCourse(Base):
     # can be shortlisted against no longer, but paid applications are still
     # honoured: money taken is a promise kept.
     closing_date = Column(DateTime(timezone=True))
+    # When applications open. NULL means already open: existing rows and
+    # courses that open immediately carry no start date.
+    application_start_date = Column(DateTime(timezone=True))
+    # Free text ("Fall 2027"). An enum would need a migration every time
+    # admissions wording changes, which is often.
+    intake_info = Column(Text)
     active = Column(Boolean, default=True)
 
     __table_args__ = (
@@ -213,7 +224,17 @@ class CoachingCenter(Base):
     city = Column(Text)
     state = Column(Text)
     active = Column(Boolean, default=True)
+    # Commercial terms, both paise. Outstanding is derived (leads x rate -
+    # credit), never stored, so the dashboard and the admin panel cannot
+    # disagree about what an institute owes.
+    amount_per_lead = Column(Integer, nullable=False, default=0, server_default=text("0"))
+    credit_paise = Column(Integer, nullable=False, default=0, server_default=text("0"))
     created_at = Column(DateTime(timezone=True), default=_utcnow, server_default=func.now())
+
+    __table_args__ = (
+        CheckConstraint("amount_per_lead >= 0", name="centre_rate_non_negative"),
+        CheckConstraint("credit_paise >= 0", name="centre_credit_non_negative"),
+    )
 
     admins = relationship("CoachingCenterAdmin", back_populates="coaching_center")
     student_links = relationship("StudentCoachingLink", back_populates="coaching_center")
@@ -359,4 +380,58 @@ class CoachingInvite(Base):
 
     __table_args__ = (
         CheckConstraint("uses <= max_uses", name="invite_uses_within_max"),
+    )
+
+
+class CoachingUpload(Base):
+    """One bulk file an institute sent. The counters are the audit trail:
+    re-uploading the same file bumps duplicates, never creates rows."""
+
+    __tablename__ = "coaching_uploads"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    coaching_center_id = Column(
+        UUID(as_uuid=True), ForeignKey("coaching_centers.id"), nullable=False
+    )
+    filename = Column(Text, nullable=False)
+    status = Column(Text, nullable=False, default="processed", server_default=text("'processed'"))
+    records_total = Column(Integer, nullable=False, default=0, server_default=text("0"))
+    records_created = Column(Integer, nullable=False, default=0, server_default=text("0"))
+    records_duplicate = Column(Integer, nullable=False, default=0, server_default=text("0"))
+    records_error = Column(Integer, nullable=False, default=0, server_default=text("0"))
+    created_at = Column(DateTime(timezone=True), default=_utcnow, server_default=func.now())
+
+
+class CoachingStudent(Base):
+    """A lead from a bulk upload. Email is unique per centre: the file, the
+    platform, and a second upload all converge here instead of duplicating."""
+
+    __tablename__ = "coaching_students"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    upload_id = Column(UUID(as_uuid=True), ForeignKey("coaching_uploads.id"))
+    coaching_center_id = Column(
+        UUID(as_uuid=True), ForeignKey("coaching_centers.id"), nullable=False
+    )
+    name = Column(Text, nullable=False)
+    email = Column(Text, nullable=False)
+    phone = Column(Text)
+    stream = Column(Text)
+    # Raw "shortlisted colleges" column from the upload that created this
+    # lead. Resolved into real shortlist rows when the lead registers.
+    interests = Column(Text)
+    status = Column(Text, nullable=False, default="uploaded", server_default=text("'uploaded'"))
+    student_id = Column(UUID(as_uuid=True), ForeignKey("students.id"))
+    created_at = Column(DateTime(timezone=True), default=_utcnow, server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("coaching_center_id", "email", name="uq_coaching_student"),
+        CheckConstraint(
+            "stream IS NULL OR stream IN ('UG', 'PG')",
+            name="coaching_student_stream_check",
+        ),
+        CheckConstraint(
+            "status IN ('uploaded', 'signed_up')",
+            name="coaching_student_status_check",
+        ),
     )

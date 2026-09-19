@@ -76,3 +76,15 @@ export const COHORT_STAGE_LABEL: Record<CohortStage, string> = {
 export function pluralise(count: number, one: string, many: string): string {
   return `${count} ${count === 1 ? one : many}`;
 }
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
+
+/**
+ * Backend-served file paths (college logos) are relative (/uploads/…).
+ * Prefix the API origin unless the value is already absolute.
+ */
+export function apiFileUrl(path: string | null | undefined): string | null {
+  if (!path) return null;
+  if (/^https?:\/\//i.test(path)) return path;
+  return `${API_BASE}${path.startsWith('/') ? '' : '/'}${path}`;
+}

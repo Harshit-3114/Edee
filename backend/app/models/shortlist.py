@@ -21,5 +21,7 @@ class ShortlistResponse(BaseModel):
     course_name: str
     stream: str
     application_fee: int  # paise
+    application_start_date: Optional[datetime] = None
+    intake_info: Optional[str] = None
     closing_date: Optional[datetime] = None
     created_at: datetime

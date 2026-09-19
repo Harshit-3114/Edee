@@ -13,6 +13,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useShortlist } from '@/hooks/useShortlist';
 import type { ShortlistEntry } from '@/lib/types';
 import api, { apiErrorMessage } from '@/lib/api';
+import { fetchBackendDevMode } from '@/lib/devSession';
 import type { OrderQuote, OrderResponse } from '@/lib/types';
 
 /** Razorpay attaches itself to window. Only the fields this page uses. */
@@ -54,12 +55,28 @@ export default function CheckoutClient({
   const [error, setError] = useState('');
   const [scriptReady, setScriptReady] = useState(false);
   const [quote, setQuote] = useState<OrderQuote | null>(null);
+  const [devMode, setDevMode] = useState(false);
 
   const busy = phase === 'creating' || phase === 'paying' || phase === 'verifying';
 
   useEffect(() => {
-    if (phase === 'done') router.replace('/student/dashboard?paid=1');
-  }, [phase, router]);
+    if (phase === 'done') {
+      router.replace(devMode ? '/student/dashboard?paid=1&dev=1' : '/student/dashboard?paid=1');
+    }
+  }, [phase, devMode, router]);
+
+  // Dev backends have no Razorpay credentials, so the real button could never
+  // work there. Detect once: dev gets a mock-pay button that runs the same
+  // pricing and fulfillment with no money moving.
+  useEffect(() => {
+    let cancelled = false;
+    void fetchBackendDevMode().then((value) => {
+      if (!cancelled) setDevMode(value);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Price preview from the same code that will charge: totals, scholarship
   // and payable, before any money moves. Falls back to the client-side sum
@@ -87,6 +104,22 @@ export default function CheckoutClient({
 
   const pay = useCallback(async () => {
     setError('');
+
+    if (devMode) {
+      // Mock walkthrough: same pricing, same applications, no Razorpay and
+      // no money. The dashboard says so on screen.
+      setPhase('creating');
+      try {
+        await api.post('/dev/mock-capture', {
+          shortlist_ids: entries.map((entry) => entry.id),
+        });
+        setPhase('done');
+      } catch (err) {
+        setPhase('idle');
+        setError(apiErrorMessage(err, 'Mock payment failed. Try again.'));
+      }
+      return;
+    }
 
     if (!scriptReady || !window.Razorpay) {
       setError('The payment window is still loading. Try again in a moment.');
@@ -159,7 +192,8 @@ export default function CheckoutClient({
     });
 
     razorpay.open();
-  }, [entries, scriptReady, user]);
+  }, [entries, scriptReady, user, devMode]);
+
 
   return (
     <>
@@ -204,11 +238,21 @@ export default function CheckoutClient({
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="flex items-center gap-2 text-[13px] text-[var(--text-secondary)]">
               <LockSimple size={15} aria-hidden="true" />
-              Card details are handled by Razorpay. They never reach our servers.
+              {devMode
+                ? 'Dev mode is on so no actual payment will take place but this is how it will look.'
+                : 'Card details are handled by Razorpay. They never reach our servers.'}
             </p>
 
-            <Button onClick={() => void pay()} loading={busy} disabled={!scriptReady}>
-              {phase === 'verifying' ? 'Confirming payment' : 'Pay now'}
+            <Button
+              onClick={() => void pay()}
+              loading={busy}
+              disabled={!devMode && !scriptReady}
+            >
+              {phase === 'verifying'
+                ? 'Confirming payment'
+                : devMode
+                  ? 'Pay now (dev mode)'
+                  : 'Pay now'}
             </Button>
           </div>
         </div>

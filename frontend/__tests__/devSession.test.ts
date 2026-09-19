@@ -31,7 +31,7 @@ describe('parseDevToken', () => {
   });
 
   it('rejects everything that is not a dev token', () => {
-    for (const bad of ['', 'bogus', 'dev:', 'dev:superuser', 'eyJhbGciOiJ9.e30.sig']) {
+    for (const bad of ['', 'bogus', 'dev:', 'dev:superuser', 'dev:phone:9876543210', 'eyJhbGciOiJ9.e30.sig']) {
       expect(parseDevToken(bad)).toBeNull();
     }
   });

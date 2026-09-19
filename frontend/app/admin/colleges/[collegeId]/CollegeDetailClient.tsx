@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState, useRef } from 'react';
+import { Fragment, useCallback, useEffect, useState, useRef } from 'react';
 import { Buildings } from '@phosphor-icons/react';
 import Badge from '@/components/ui/Badge';
 import BackLink from '@/components/ui/BackLink';
@@ -13,9 +13,9 @@ import StatTile, { StatRow } from '@/components/ui/StatTile';
 import { Table, TableWrap, Td, Th, Tr } from '@/components/ui/Table';
 import { EmptyState, ErrorState, Skeleton } from '@/components/ui/States';
 import api, { apiErrorMessage } from '@/lib/api';
-import { formatDate, formatFee } from '@/lib/format';
+import { apiFileUrl, formatDate, formatFee } from '@/lib/format';
 import { PORTAL_LABEL } from '@/lib/portals';
-import type { AdminCollegeDetail, CollegeType } from '@/lib/types';
+import type { AdminCollegeDetail, CollegeType, Stream } from '@/lib/types';
 
 /**
  * `initialCollege` is the record the server already fetched with the session cookie.
@@ -36,6 +36,32 @@ export default function CollegeDetailClient({
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoBusy, setLogoBusy] = useState(false);
+
+  const [showAddCourse, setShowAddCourse] = useState(false);
+  const [courseBusy, setCourseBusy] = useState(false);
+  const [courseError, setCourseError] = useState('');
+  const [newCourse, setNewCourse] = useState({
+    name: '',
+    stream: 'UG' as Stream,
+    duration: '3',
+    seats: '60',
+    fee: '1500',
+    start: '',
+    closing: '',
+    intake: '',
+  });
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editFields, setEditFields] = useState({
+    seats: '',
+    fee: '',
+    start: '',
+    closing: '',
+    intake: '',
+  });
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -90,12 +116,132 @@ export default function CollegeDetailClient({
         landing_hero_image_url: college.landing_hero_image_url?.trim() || null,
         landing_description: college.landing_description?.trim() || null,
         landing_gallery_urls: college.landing_gallery_urls ?? null,
+        application_phases: college.application_phases?.trim() || null,
       });
       setSaved(true);
     } catch (err) {
       setError(apiErrorMessage(err, 'Could not save the college.'));
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function uploadLogo(event: React.FormEvent) {
+    event.preventDefault();
+    if (!college || !logoFile) return;
+    setLogoBusy(true);
+    setError('');
+    try {
+      const form = new FormData();
+      form.append('file', logoFile);
+      const { data } = await api.post<{ logo_url: string }>(
+        `/admin/colleges/${college.id}/logo`,
+        form,
+        { headers: { 'Content-Type': 'multipart/form-data' } },
+      );
+      update('logo_url', data.logo_url);
+      setLogoFile(null);
+      setSaved(true);
+    } catch (err) {
+      setError(apiErrorMessage(err, 'Could not upload the logo.'));
+    } finally {
+      setLogoBusy(false);
+    }
+  }
+
+  function startEdit(courseId: string) {
+    const course = college?.courses?.find((c) => c.id === courseId);
+    if (!course) return;
+    setEditFields({
+      seats: String(course.seats ?? ''),
+      fee: String(Math.round(course.application_fee / 100)),
+      start: course.application_start_date?.slice(0, 10) ?? '',
+      closing: course.closing_date?.slice(0, 10) ?? '',
+      intake: course.intake_info ?? '',
+    });
+    setEditingId(courseId);
+    setCourseError('');
+  }
+
+  async function saveCourse(event: React.FormEvent, courseId: string) {
+    event.preventDefault();
+    if (editFields.start && editFields.closing && editFields.start > editFields.closing) {
+      setCourseError('Applications cannot open after they close.');
+      return;
+    }
+    setCourseBusy(true);
+    setCourseError('');
+    try {
+      await api.patch(`/admin/colleges/${id}/courses/${courseId}`, {
+        seats: Number(editFields.seats),
+        application_fee: Math.round(Number(editFields.fee) * 100),
+        application_start_date: editFields.start || null,
+        intake_info: editFields.intake.trim() || null,
+        closing_date: editFields.closing || null,
+      });
+      setEditingId(null);
+      await load();
+    } catch (err) {
+      setCourseError(apiErrorMessage(err, 'Could not save the course.'));
+    } finally {
+      setCourseBusy(false);
+    }
+  }
+
+  async function addCourse(event: React.FormEvent) {
+    event.preventDefault();
+    if (newCourse.name.trim().length < 3) {
+      setCourseError('Give the course a full name.');
+      return;
+    }
+    if (newCourse.start && newCourse.closing && newCourse.start > newCourse.closing) {
+      setCourseError('Applications cannot open after they close.');
+      return;
+    }
+    setCourseBusy(true);
+    setCourseError('');
+    try {
+      await api.post(`/admin/colleges/${id}/courses`, {
+        course_name: newCourse.name.trim(),
+        stream: newCourse.stream,
+        duration_years: Number(newCourse.duration) || null,
+        seats: Number(newCourse.seats),
+        application_fee: Math.round(Number(newCourse.fee) * 100),
+        application_start_date: newCourse.start || null,
+        intake_info: newCourse.intake.trim() || null,
+        closing_date: newCourse.closing || null,
+      });
+      setNewCourse({
+        name: '',
+        stream: 'UG',
+        duration: '3',
+        seats: '60',
+        fee: '1500',
+        start: '',
+        closing: '',
+        intake: '',
+      });
+      setShowAddCourse(false);
+      await load();
+    } catch (err) {
+      setCourseError(apiErrorMessage(err, 'Could not add the course.'));
+    } finally {
+      setCourseBusy(false);
+    }
+  }
+
+  async function deleteCourse(courseId: string) {
+    setCourseBusy(true);
+    setCourseError('');
+    try {
+      await api.delete(`/admin/colleges/${id}/courses/${courseId}`);
+      setDeletingId(null);
+      await load();
+    } catch (err) {
+      setCourseError(apiErrorMessage(err, 'Could not delete the course.'));
+      setDeletingId(null);
+    } finally {
+      setCourseBusy(false);
     }
   }
 
@@ -284,6 +430,19 @@ export default function CollegeDetailClient({
               )}
             </Field>
 
+            <Field
+              label="Application phases"
+              hint="Free text, shown on the public landing page. e.g. Phase 1: Jun–Jul; Phase 2: Aug."
+            >
+              {(fieldProps) => (
+                <Textarea
+                  {...fieldProps}
+                  value={college.application_phases ?? ''}
+                  onChange={(event) => update('application_phases', event.target.value)}
+                />
+              )}
+            </Field>
+
             {error && <ErrorState message={error} />}
 
             <div className="flex items-center gap-3">
@@ -299,10 +458,179 @@ export default function CollegeDetailClient({
           </form>
         </Panel>
 
-        <Panel title="Courses">
+        <Panel
+          title="College logo"
+          action={
+            apiFileUrl(college.logo_url) ? (
+              // unoptimized: same-origin API file, no remote-pattern config needed.
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={apiFileUrl(college.logo_url) as string}
+                alt={`${college.name} logo`}
+                className="h-12 w-auto object-contain"
+              />
+            ) : undefined
+          }
+        >
+          <form onSubmit={uploadLogo} className="flex flex-wrap items-center gap-3">
+            <Input
+              type="file"
+              accept=".png,.jpg,.jpeg,.webp"
+              aria-label="College logo file"
+              onChange={(event) => setLogoFile(event.target.files?.[0] ?? null)}
+            />
+            <Button type="submit" loading={logoBusy} disabled={!logoFile}>
+              Upload logo
+            </Button>
+            <span className="text-[13px] text-[var(--text-secondary)]">
+              PNG, JPG or WebP under 2 MB. Shown on the public landing page.
+            </span>
+          </form>
+        </Panel>
+
+        <Panel
+          title="Courses"
+          action={
+            !showAddCourse ? (
+              <Button variant="secondary" size="sm" onClick={() => setShowAddCourse(true)}>
+                Add a course
+              </Button>
+            ) : undefined
+          }
+        >
+          {courseError && (
+            <div className="mb-4">
+              <ErrorState message={courseError} />
+            </div>
+          )}
+
+          {showAddCourse && (
+            <form
+              onSubmit={addCourse}
+              className="mb-5 rounded-lg border border-[var(--line)] p-4"
+              noValidate
+            >
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="sm:col-span-2">
+                  <Field label="Course name" required>
+                    {(fieldProps) => (
+                      <Input
+                        {...fieldProps}
+                        value={newCourse.name}
+                        onChange={(event) =>
+                          setNewCourse({ ...newCourse, name: event.target.value })
+                        }
+                        placeholder="B.Tech Computer Science"
+                      />
+                    )}
+                  </Field>
+                </div>
+                <Field label="Stream" required>
+                  {(fieldProps) => (
+                    <Select
+                      {...fieldProps}
+                      value={newCourse.stream}
+                      onChange={(event) =>
+                        setNewCourse({ ...newCourse, stream: event.target.value as Stream })
+                      }
+                    >
+                      <option value="UG">Undergraduate</option>
+                      <option value="PG">Postgraduate</option>
+                    </Select>
+                  )}
+                </Field>
+                <Field label="Duration in years">
+                  {(fieldProps) => (
+                    <Input
+                      {...fieldProps}
+                      type="number"
+                      min={1}
+                      max={7}
+                      value={newCourse.duration}
+                      onChange={(event) =>
+                        setNewCourse({ ...newCourse, duration: event.target.value })
+                      }
+                    />
+                  )}
+                </Field>
+                <Field label="Seats" required>
+                  {(fieldProps) => (
+                    <Input
+                      {...fieldProps}
+                      type="number"
+                      min={1}
+                      value={newCourse.seats}
+                      onChange={(event) =>
+                        setNewCourse({ ...newCourse, seats: event.target.value })
+                      }
+                    />
+                  )}
+                </Field>
+                <Field label="Application fee (rupees)" required>
+                  {(fieldProps) => (
+                    <Input
+                      {...fieldProps}
+                      type="number"
+                      min={1}
+                      value={newCourse.fee}
+                      onChange={(event) =>
+                        setNewCourse({ ...newCourse, fee: event.target.value })
+                      }
+                    />
+                  )}
+                </Field>
+                <Field label="Applications open">
+                  {(fieldProps) => (
+                    <Input
+                      {...fieldProps}
+                      type="date"
+                      value={newCourse.start}
+                      onChange={(event) =>
+                        setNewCourse({ ...newCourse, start: event.target.value })
+                      }
+                    />
+                  )}
+                </Field>
+                <Field label="Application deadline">
+                  {(fieldProps) => (
+                    <Input
+                      {...fieldProps}
+                      type="date"
+                      value={newCourse.closing}
+                      onChange={(event) =>
+                        setNewCourse({ ...newCourse, closing: event.target.value })
+                      }
+                    />
+                  )}
+                </Field>
+                <Field label="Intake">
+                  {(fieldProps) => (
+                    <Input
+                      {...fieldProps}
+                      value={newCourse.intake}
+                      maxLength={200}
+                      onChange={(event) =>
+                        setNewCourse({ ...newCourse, intake: event.target.value })
+                      }
+                      placeholder="Fall 2027"
+                    />
+                  )}
+                </Field>
+              </div>
+              <div className="mt-4 flex items-center gap-2">
+                <Button type="submit" loading={courseBusy}>
+                  Add course
+                </Button>
+                <Button type="button" variant="ghost" onClick={() => setShowAddCourse(false)}>
+                  Cancel
+                </Button>
+              </div>
+            </form>
+          )}
+
           {!college.courses || college.courses.length === 0 ? (
             <p className="text-sm text-[var(--text-secondary)]">
-              No courses listed. College staff add these from their own portal.
+              No courses listed. Add the first one above.
             </p>
           ) : (
             <TableWrap>
@@ -314,24 +642,170 @@ export default function CollegeDetailClient({
                     <Th>Stream</Th>
                     <Th numeric>Seats</Th>
                     <Th numeric>Fee</Th>
+                    <Th>Window</Th>
                     <Th>Status</Th>
+                    <Th>
+                      <span className="sr-only">Actions</span>
+                    </Th>
                   </tr>
                 </thead>
                 <tbody>
                   {college.courses.map((course) => (
-                    <Tr key={course.id}>
-                      <Td>
-                        <span className="font-medium">{course.course_name}</span>
-                      </Td>
-                      <Td>{course.stream}</Td>
-                      <Td numeric>{course.seats ?? '-'}</Td>
-                      <Td numeric>{formatFee(course.application_fee)}</Td>
-                      <Td>
-                        <Badge tone={course.active ? 'success' : 'neutral'}>
-                          {course.active ? 'Open' : 'Closed'}
-                        </Badge>
-                      </Td>
-                    </Tr>
+                    <Fragment key={course.id}>
+                      <Tr>
+                        <Td>
+                          <span className="font-medium">{course.course_name}</span>
+                        </Td>
+                        <Td>{course.stream}</Td>
+                        <Td numeric>{course.seats ?? '-'}</Td>
+                        <Td numeric>{formatFee(course.application_fee)}</Td>
+                        <Td>
+                          {course.application_start_date
+                            ? formatDate(course.application_start_date)
+                            : 'Open'}
+                          {' → '}
+                          {course.closing_date ? formatDate(course.closing_date) : '—'}
+                        </Td>
+                        <Td>
+                          <Badge tone={course.active ? 'success' : 'neutral'}>
+                            {course.active ? 'Open' : 'Closed'}
+                          </Badge>
+                        </Td>
+                        <Td>
+                          <span className="flex gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() =>
+                                editingId === course.id
+                                  ? setEditingId(null)
+                                  : startEdit(course.id)
+                              }
+                            >
+                              Edit
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setDeletingId(course.id)}
+                            >
+                              Delete
+                            </Button>
+                          </span>
+                        </Td>
+                      </Tr>
+                      {editingId === course.id && (
+                        <Tr key={`${course.id}-edit`}>
+                          <Td colSpan={7}>
+                            <form
+                              onSubmit={(event) => void saveCourse(event, course.id)}
+                              className="flex flex-wrap items-end gap-3 py-1"
+                            >
+                              <Field label="Seats">
+                                {(fieldProps) => (
+                                  <Input
+                                    {...fieldProps}
+                                    type="number"
+                                    min={1}
+                                    value={editFields.seats}
+                                    onChange={(event) =>
+                                      setEditFields({ ...editFields, seats: event.target.value })
+                                    }
+                                  />
+                                )}
+                              </Field>
+                              <Field label="Fee (rupees)">
+                                {(fieldProps) => (
+                                  <Input
+                                    {...fieldProps}
+                                    type="number"
+                                    min={1}
+                                    value={editFields.fee}
+                                    onChange={(event) =>
+                                      setEditFields({ ...editFields, fee: event.target.value })
+                                    }
+                                  />
+                                )}
+                              </Field>
+                              <Field label="Opens">
+                                {(fieldProps) => (
+                                  <Input
+                                    {...fieldProps}
+                                    type="date"
+                                    value={editFields.start}
+                                    onChange={(event) =>
+                                      setEditFields({ ...editFields, start: event.target.value })
+                                    }
+                                  />
+                                )}
+                              </Field>
+                              <Field label="Deadline">
+                                {(fieldProps) => (
+                                  <Input
+                                    {...fieldProps}
+                                    type="date"
+                                    value={editFields.closing}
+                                    onChange={(event) =>
+                                      setEditFields({ ...editFields, closing: event.target.value })
+                                    }
+                                  />
+                                )}
+                              </Field>
+                              <Field label="Intake">
+                                {(fieldProps) => (
+                                  <Input
+                                    {...fieldProps}
+                                    value={editFields.intake}
+                                    maxLength={200}
+                                    onChange={(event) =>
+                                      setEditFields({ ...editFields, intake: event.target.value })
+                                    }
+                                  />
+                                )}
+                              </Field>
+                              <Button type="submit" size="sm" loading={courseBusy}>
+                                Save
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setEditingId(null)}
+                              >
+                                Cancel
+                              </Button>
+                            </form>
+                          </Td>
+                        </Tr>
+                      )}
+                      {deletingId === course.id && (
+                        <Tr key={`${course.id}-delete`}>
+                          <Td colSpan={7}>
+                            <p className="text-[13px]">
+                              Delete {course.course_name} permanently? Only possible
+                              when nothing references it - otherwise deactivate it
+                              from the college portal instead.
+                            </p>
+                            <span className="mt-2 flex gap-2">
+                              <Button
+                                size="sm"
+                                loading={courseBusy}
+                                onClick={() => void deleteCourse(course.id)}
+                              >
+                                Delete permanently
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setDeletingId(null)}
+                              >
+                                Keep it
+                              </Button>
+                            </span>
+                          </Td>
+                        </Tr>
+                      )}
+                    </Fragment>
                   ))}
                 </tbody>
               </Table>

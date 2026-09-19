@@ -34,6 +34,24 @@ class Settings(BaseSettings):
     # any site they happen to visit.
     CORS_ORIGINS: str = "http://localhost:3000"
 
+    # Public site origin, for absolute links inside emails. Must be the pages
+    # students open, not this API: nobody clicks through to /docs from mail.
+    PUBLIC_URL: str = "http://localhost:3000"
+
+    # Outbound email (transactional: decisions, receipts, invites, alerts).
+    # Empty SMTP_HOST disables sending: development logs instead of mailing,
+    # and every send is best-effort anyway (see app/services/email.py).
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM: str = "Edee Apply <no-reply@edeeapply.in>"
+    SMTP_STARTTLS: bool = True
+
+    # Platform inbox for operational alerts (contact-form arrivals). Empty
+    # means no alert mails; the admin inbox page still lists everything.
+    ADMIN_EMAIL: str = ""
+
     @property
     def cors_origins(self) -> List[str]:
         return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]

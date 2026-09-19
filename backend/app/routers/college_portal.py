@@ -19,6 +19,7 @@ from app.db.connection import get_db
 from app.middleware.auth import current_college_id, require_roles
 from app.models.college import clean_gallery, dump_gallery, parse_gallery
 from app.services.notify import notify
+from app.services.email import portal_url, send_email
 
 router = APIRouter()
 
@@ -43,16 +44,39 @@ class CourseCreate(BaseModel):
     # Paise on the wire, rupees in the column. The `% 100 == 0` guard stops a
     # sub-rupee amount from being silently floored to a different fee on storage.
     application_fee: int = Field(ge=100, le=10_000_000, multiple_of=100)
+    # When applications open. Absent means already open; a future date holds
+    # the course until then on student-facing pages.
+    application_start_date: Optional[datetime] = None
+    # Free text ("Fall 2027"). Shown verbatim wherever the course is listed.
+    intake_info: Optional[str] = Field(default=None, max_length=200)
     # When applications close. Absent means open indefinitely; a past date
     # closes the course immediately.
     closing_date: Optional[datetime] = None
+
+    @field_validator("intake_info")
+    @classmethod
+    def _intake(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        return cleaned or None
 
 
 class CourseUpdate(BaseModel):
     seats: Optional[int] = Field(default=None, ge=1, le=100_000)
     application_fee: Optional[int] = Field(default=None, ge=100, le=10_000_000, multiple_of=100)
+    application_start_date: Optional[datetime] = None
+    intake_info: Optional[str] = Field(default=None, max_length=200)
     closing_date: Optional[datetime] = None
     active: Optional[bool] = None
+
+    @field_validator("intake_info")
+    @classmethod
+    def _intake(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        return cleaned or None
 
 
 class StatusUpdate(BaseModel):
@@ -133,7 +157,8 @@ async def list_courses(
         text(
             """
             SELECT id, college_id, course_name, stream, duration_years, seats,
-                   application_fee * 100 AS application_fee, active, closing_date
+                   application_fee * 100 AS application_fee, active,
+                   application_start_date, intake_info, closing_date
             FROM college_courses
             WHERE college_id = :cid
             ORDER BY active DESC, course_name
@@ -151,14 +176,23 @@ async def create_course(
     db: AsyncSession = Depends(get_db),
 ):
     course_id = uuid4()
+    if (
+        body.application_start_date
+        and body.closing_date
+        and body.application_start_date > body.closing_date
+    ):
+        raise HTTPException(
+            status_code=422, detail="The application window cannot open after it closes"
+        )
     await db.execute(
         text(
             """
             INSERT INTO college_courses
                 (id, college_id, course_name, stream, duration_years, seats,
-                 application_fee, closing_date, active)
+                 application_fee, application_start_date, intake_info,
+                 closing_date, active)
             VALUES (:id, :cid, :name, :stream, :duration, :seats, :fee,
-                    :closing_date, true)
+                    :start_date, :intake, :closing_date, true)
             """
         ),
         {
@@ -169,6 +203,8 @@ async def create_course(
             "duration": body.duration_years,
             "seats": body.seats,
             "fee": body.application_fee // 100,
+            "start_date": body.application_start_date,
+            "intake": body.intake_info,
             "closing_date": body.closing_date,
         },
     )
@@ -188,7 +224,7 @@ async def get_course(
             SELECT cc.id, cc.college_id, cc.course_name, cc.stream,
                    cc.duration_years, cc.seats,
                    cc.application_fee * 100 AS application_fee, cc.active,
-                   cc.closing_date,
+                   cc.application_start_date, cc.intake_info, cc.closing_date,
                    (SELECT count(*) FROM applications a
                      WHERE a.course_id = cc.id)                     AS applications_total,
                    (SELECT count(*) FROM applications a
@@ -238,7 +274,14 @@ async def update_course(
     if "application_fee" in updates:
         updates["application_fee"] //= 100
 
-    allowed = ("seats", "application_fee", "closing_date", "active")
+    allowed = (
+        "seats",
+        "application_fee",
+        "application_start_date",
+        "intake_info",
+        "closing_date",
+        "active",
+    )
     fields = [k for k in allowed if k in updates]
     assignments = ", ".join(f"{k} = :{k}" for k in fields)
 
@@ -392,7 +435,8 @@ async def update_application(
     student = await db.execute(
         text(
             """
-            SELECT s.firebase_uid, c.name AS college_name, cc.course_name
+            SELECT s.firebase_uid, s.email, s.name AS student_name,
+                   c.name AS college_name, cc.course_name
             FROM applications a
             JOIN students s ON s.id = a.student_id
             JOIN colleges c ON c.id = a.college_id
@@ -403,12 +447,12 @@ async def update_application(
         {"aid": application_id},
     )
     info = student.fetchone()
+    headline = {
+        "accepted": "Accepted",
+        "rejected": "Not selected",
+        "under_review": "Under review",
+    }[body.status]
     if info is not None:
-        headline = {
-            "accepted": "Accepted",
-            "rejected": "Not selected",
-            "under_review": "Under review",
-        }[body.status]
         await notify(
             db,
             info.firebase_uid,
@@ -425,6 +469,17 @@ async def update_application(
         row.status,
         body.status,
     )
+    if info is not None:
+        note = f"\n\nNote from the college: {body.status_note}" if body.status_note else ""
+        await send_email(
+            info.email,
+            f"{headline}: {info.course_name} at {info.college_name}",
+            f"Hi {info.student_name},\n\n"
+            f"{info.college_name} has updated your application for "
+            f"{info.course_name}: {headline.lower()}.{note}\n\n"
+            f"Track it here:\n{portal_url('/student/dashboard')}",
+            purpose="application-status",
+        )
     return {"status": body.status}
 
 
@@ -436,7 +491,8 @@ async def get_profile(
     result = await db.execute(
         text(
             "SELECT name, location, city, state, type, "
-            "landing_hero_image_url, landing_description, landing_gallery_urls "
+            "landing_hero_image_url, landing_description, landing_gallery_urls, "
+            "application_phases, logo_url "
             "FROM colleges WHERE id = :cid"
         ),
         {"cid": college_id},

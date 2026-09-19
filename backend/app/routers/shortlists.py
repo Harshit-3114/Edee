@@ -45,6 +45,8 @@ async def get_shortlist(
                    cc.course_name,
                    cc.stream,
                    cc.application_fee * 100 AS application_fee,
+                   cc.application_start_date,
+                   cc.intake_info,
                    cc.closing_date,
                    s.created_at
             FROM shortlists s
