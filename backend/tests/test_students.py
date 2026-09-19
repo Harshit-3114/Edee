@@ -195,6 +195,61 @@ class TestStudents:
         me = (await client.get("/students/me")).json()
         assert me["coaching_centre_name"] is None
 
+    async def test_referral_cannot_be_changed_or_removed(
+        self, client: AsyncClient, auth_as, db_session
+    ):
+        """The referral is set once at signup. PATCH accepts only
+        name/phone/stream, so any linkage fields in the body are ignored."""
+        centre_id = uuid.uuid4()
+        other_id = uuid.uuid4()
+        for cid, name in ((centre_id, "Pragati Academy"), (other_id, "Other Centre")):
+            await db_session.execute(
+                text(
+                    """
+                    INSERT INTO coaching_centers (id, name, city, state, active)
+                    VALUES (:id, :name, 'Pune', 'Maharashtra', true)
+                    """
+                ),
+                {"id": cid, "name": name},
+            )
+        await db_session.execute(
+            text(
+                """
+                INSERT INTO coaching_invites
+                    (id, coaching_center_id, code, max_uses, uses)
+                VALUES (:id, :cid, 'LOCKED1', 5, 0)
+                """
+            ),
+            {"id": uuid.uuid4(), "cid": centre_id},
+        )
+        await db_session.commit()
+
+        auth_as("uid-locked", role="student")
+        await client.post(
+            "/students/",
+            json={
+                "name": "Locked Person",
+                "email": "locked@example.com",
+                "phone": "9876500013",
+                "stream": "UG",
+                "invite_code": "LOCKED1",
+            },
+        )
+        # Rename works; the referral smuggled alongside is ignored.
+        response = await client.patch(
+            "/students/me",
+            json={
+                "name": "Renamed Person",
+                "coaching_centre_name": "Other Centre",
+                "coaching_centre_id": str(other_id),
+                "invite_code": "LOCKED1",
+            },
+        )
+        assert response.status_code == 200
+        assert response.json()["name"] == "Renamed Person"
+        me = (await client.get("/students/me")).json()
+        assert me["coaching_centre_name"] == "Pragati Academy"
+
     async def test_my_applications_carries_the_course_deadline(
         self, client: AsyncClient, auth_as, db_session, seed_college
     ):

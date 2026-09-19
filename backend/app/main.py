@@ -54,6 +54,17 @@ async def lifespan(app: FastAPI):
     if is_dev_mode():
         log_dev_mode_once()
     await init_db()
+    if is_dev_mode():
+        # Empty database, open laptop: seed the mock catalogue (colleges,
+        # courses, a coaching centre, scholarship slabs) so every page has
+        # something to show. Skipped when dev mode is off, and skipped when
+        # colleges already exist - real data is never touched.
+        from app.core.devseed import seed_mock_catalogue
+
+        try:
+            await seed_mock_catalogue()
+        except Exception:
+            logger.exception("Mock catalogue seeding failed")
     yield
     # Mock users are process-scoped by design: a mock identity must never
     # survive the server that made it, or next boot inherits stale rows.
