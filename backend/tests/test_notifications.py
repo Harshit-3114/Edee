@@ -114,6 +114,8 @@ class TestNotifications:
         assert data["unread_count"] == 1
         note = data["notifications"][0]
         assert note["type"] == "application_status"
-        assert "Under review" in note["title"]
-        assert "B.Sc Statistics" in note["title"]
+        # The student-facing site never shows the verdict: the title names
+        # the application, never the decision.
+        assert note["title"] == "Update on your application for B.Sc Statistics at Fergusson College"
+        assert "Under review" not in note["title"]
         assert note["link"] == "/student/dashboard"

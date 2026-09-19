@@ -1,16 +1,15 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { BookmarkSimple, CheckCircle, FileText } from '@phosphor-icons/react';
 import PageHeader from '@/components/shells/PageHeader';
-import ApplicationStatusCard from '@/components/student/ApplicationStatusCard';
+import AppliedCollegeCard from '@/components/student/AppliedCollegeCard';
 import LinkButton from '@/components/ui/LinkButton';
-import StatTile, { StatRow } from '@/components/ui/StatTile';
 import { CardSkeleton, EmptyState, ErrorState } from '@/components/ui/States';
 import api, { apiErrorMessage } from '@/lib/api';
-import { APPLICATION_STATUS_LABEL, formatDate, formatFee } from '@/lib/format';
-import type { Application, ApplicationStatus, ShortlistEntry } from '@/lib/types';
+import { formatDate, formatFee } from '@/lib/format';
+import type { Application, ShortlistEntry } from '@/lib/types';
 
 /**
  * The interactive half of the dashboard.
@@ -36,7 +35,6 @@ export default function StudentDashboardClient({
   const [applications, setApplications] = useState<Application[]>(initialApplications ?? []);
   const [loading, setLoading] = useState(initialApplications === null);
   const [error, setError] = useState('');
-  const [withdrawingId, setWithdrawingId] = useState<string | null>(null);
 
   const [shortlist, setShortlist] = useState<ShortlistEntry[]>(initialShortlist ?? []);
   const [shortlistLoading, setShortlistLoading] = useState(initialShortlist === null);
@@ -82,38 +80,11 @@ export default function StudentDashboardClient({
     void loadShortlist();
   }, [loadShortlist]);
 
-  const withdraw = useCallback(
-    async (id: string) => {
-      setWithdrawingId(id);
-      try {
-        await api.post(`/students/me/applications/${id}/withdraw`);
-        await load();
-      } catch (err) {
-        setError(apiErrorMessage(err, 'Could not withdraw that application.'));
-      } finally {
-        setWithdrawingId(null);
-      }
-    },
-    [load],
-  );
-
-  const counts = useMemo(() => {
-    const tally: Record<ApplicationStatus, number> = {
-      payment_received: 0,
-      under_review: 0,
-      accepted: 0,
-      rejected: 0,
-      withdrawn: 0,
-    };
-    for (const application of applications) tally[application.status] += 1;
-    return tally;
-  }, [applications]);
-
   return (
     <>
       <PageHeader
         title="Your applications"
-        description="Colleges update these as they review. You will not need to pay again."
+        description="Colleges you have applied to. You will not need to pay again."
         action={
           applications.length > 0 ? (
             <LinkButton href="/student/colleges" variant="secondary" size="sm">Apply to more</LinkButton>
@@ -172,7 +143,7 @@ export default function StudentDashboardClient({
         <EmptyState
           icon={<FileText size={26} />}
           title="No applications yet"
-          body="Once you pay for a shortlisted course, the application appears here and you can follow its status."
+          body="Once you pay for a shortlisted course, the application appears here."
           action={
             <LinkButton href="/student/colleges">Find colleges</LinkButton>
           }
@@ -180,37 +151,9 @@ export default function StudentDashboardClient({
       )}
 
       {!loading && !error && applications.length > 0 && (
-        <div className="mb-5">
-          <StatRow>
-            <StatTile
-              label={APPLICATION_STATUS_LABEL.payment_received}
-              value={String(counts.payment_received)}
-            />
-            <StatTile
-              label={APPLICATION_STATUS_LABEL.under_review}
-              value={String(counts.under_review)}
-            />
-            <StatTile
-              label={APPLICATION_STATUS_LABEL.accepted}
-              value={String(counts.accepted)}
-            />
-            <StatTile
-              label={APPLICATION_STATUS_LABEL.rejected}
-              value={String(counts.rejected)}
-            />
-          </StatRow>
-        </div>
-      )}
-
-      {!loading && !error && applications.length > 0 && (
         <div className="grid gap-4">
           {applications.map((application) => (
-            <ApplicationStatusCard
-              key={application.id}
-              application={application}
-              onWithdraw={(id) => void withdraw(id)}
-              withdrawing={withdrawingId === application.id}
-            />
+            <AppliedCollegeCard key={application.id} application={application} />
           ))}
         </div>
       )}

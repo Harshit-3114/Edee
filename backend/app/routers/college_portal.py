@@ -447,18 +447,17 @@ async def update_application(
         {"aid": application_id},
     )
     info = student.fetchone()
-    headline = {
-        "accepted": "Accepted",
-        "rejected": "Not selected",
-        "under_review": "Under review",
-    }[body.status]
+    # The student-facing site never shows the verdict - only that something
+    # changed. The headline stays inside the college portal, where statuses
+    # are managed; the student's own words from the college arrive as the
+    # note, which staff write knowing the student reads them.
     if info is not None:
         await notify(
             db,
             info.firebase_uid,
             "student",
             "application_status",
-            f"{headline}: {info.course_name} at {info.college_name}",
+            f"Update on your application for {info.course_name} at {info.college_name}",
             body.status_note,
             "/student/dashboard",
         )
@@ -473,11 +472,11 @@ async def update_application(
         note = f"\n\nNote from the college: {body.status_note}" if body.status_note else ""
         await send_email(
             info.email,
-            f"{headline}: {info.course_name} at {info.college_name}",
+            f"Update on your application for {info.course_name} at {info.college_name}",
             f"Hi {info.student_name},\n\n"
             f"{info.college_name} has updated your application for "
-            f"{info.course_name}: {headline.lower()}.{note}\n\n"
-            f"Track it here:\n{portal_url('/student/dashboard')}",
+            f"{info.course_name}.{note}\n\n"
+            f"See your applications here:\n{portal_url('/student/dashboard')}",
             purpose="application-status",
         )
     return {"status": body.status}
