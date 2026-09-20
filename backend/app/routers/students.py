@@ -10,11 +10,14 @@ from app.models.student import (
     StudentUpdate,
 )
 from app.services.firebase import assign_role
-from app.services.leads import apply_interests
-from app.services.email import portal_url, send_email
+from app.services.signup import (
+    ensure_unused,
+    insert_student,
+    redeem_invite_code,
+    send_welcome,
+)
 from app.core.rate_limit import limited
 from uuid import UUID
-import uuid
 import logging
 
 logger = logging.getLogger(__name__)
@@ -63,103 +66,23 @@ async def create_student(
     token_phone = user.get("phone_number")  # E.164 when signed in by OTP
     phone = (token_phone[-10:] if token_phone else body.phone).strip()
 
-    # Checked here for a clean 409; the unique indexes are what guarantee it.
-    clash = await db.execute(
-        text("SELECT 1 FROM students WHERE email = :email OR phone = :phone LIMIT 1"),
-        {"email": email, "phone": phone},
-    )
-    if clash.fetchone():
-        raise HTTPException(
-            status_code=409, detail="That email or phone number is already registered"
-        )
+    await ensure_unused(db, email, phone)
 
-    student_id = uuid.uuid4()
-    await db.execute(
-        text(
-            """
-            INSERT INTO students (id, firebase_uid, name, email, phone, stream)
-            VALUES (:id, :firebase_uid, :name, :email, :phone, :stream)
-            """
-        ),
-        {
-            "id": student_id,
-            "firebase_uid": firebase_uid,
-            "name": body.name.strip(),
-            "email": email,
-            "phone": phone,
-            "stream": body.stream,
-        },
+    student_id = await insert_student(
+        db,
+        uid=firebase_uid,
+        name=body.name.strip(),
+        email=email,
+        phone=phone,
+        stream=body.stream,
     )
 
     # Claim and row are written together. If the claim fails the row is rolled
     # back, rather than leaving a student who can never reach their portal.
     assign_role(firebase_uid, "student")
 
-    # A coaching invite code, if supplied, links this student to the issuing
-    # centre in the same transaction. Redeeming checks expiry and the use cap
-    # with a row lock so two students racing the last use cannot both win.
     if body.invite_code:
-        link_result = await db.execute(
-            text(
-                """
-                WITH claimed AS (
-                    UPDATE coaching_invites
-                    SET uses = uses + 1
-                    WHERE code = :code
-                      AND (expires_at IS NULL OR expires_at > now())
-                      AND uses < max_uses
-                    RETURNING coaching_center_id
-                )
-                INSERT INTO student_coaching_links
-                    (id, student_id, coaching_center_id)
-                SELECT :link_id, :student_id, coaching_center_id FROM claimed
-                """
-            ),
-            {"code": body.invite_code, "student_id": student_id, "link_id": uuid.uuid4()},
-        )
-        if link_result.rowcount == 0:
-            # Could be unknown, expired, or exhausted. Do not distinguish in the
-            # body: the exact reason is not something a stranger needs to probe.
-            await db.rollback()
-            raise HTTPException(
-                status_code=400,
-                detail="That invite code is not valid or has already been used up",
-            )
-
-        # A bulk-uploaded lead who registers graduates to signed_up, so the
-        # institute's cumulative database reflects reality instead of going
-        # stale the moment a lead converts.
-        await db.execute(
-            text(
-                """
-                UPDATE coaching_students cs
-                SET status = 'signed_up', student_id = :student_id
-                FROM coaching_invites ci
-                WHERE ci.code = :code
-                  AND ci.coaching_center_id = cs.coaching_center_id
-                  AND cs.email = :email
-                """
-            ),
-            {"code": body.invite_code, "student_id": student_id, "email": email},
-        )
-
-        # Whatever the institute shortlisted on the lead's behalf becomes real
-        # shortlists now that a student exists to own them. Best effort:
-        # unknown or closed courses are skipped, never errors.
-        lead = await db.execute(
-            text(
-                """
-                SELECT cs.interests FROM coaching_students cs
-                JOIN coaching_invites ci
-                  ON ci.coaching_center_id = cs.coaching_center_id
-                WHERE ci.code = :code AND cs.email = :email
-                """
-            ),
-            {"code": body.invite_code, "email": email},
-        )
-        lead_row = lead.fetchone()
-        if lead_row is not None and lead_row[0]:
-            await apply_interests(db, student_id, lead_row[0])
+        await redeem_invite_code(db, student_id, body.invite_code, email)
 
     await db.commit()
 
@@ -169,14 +92,7 @@ async def create_student(
         body.stream,
         bool(body.invite_code),
     )
-    await send_email(
-        email,
-        "Your Edee Apply profile is ready",
-        f"Hi {body.name.strip()},\n\n"
-        "Your profile is created. Shortlist the courses you want and pay "
-        f"once for all of them:\n{portal_url('/student/colleges')}",
-        purpose="signup",
-    )
+    await send_welcome(email, body.name.strip())
     return {"id": student_id, "name": body.name.strip(), "stream": body.stream}
 
 

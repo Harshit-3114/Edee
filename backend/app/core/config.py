@@ -18,6 +18,27 @@ class Settings(BaseSettings):
     # boot with it set to 1.
     DEV_MODE: Optional[bool] = None
 
+    # Signs the session tokens the local email/password path issues (see
+    # app/core/local_token.py). Unrelated to Firebase: it exists so the
+    # platform can authenticate people while no service account is
+    # configured. Staging and production refuse to boot without it;
+    # development falls back to a public constant with a warning.
+    AUTH_SECRET: str = ""
+
+    # Seeded admin account for the local path, so a fresh database has one way
+    # in. seeds/local_admin.py refuses to run in production regardless.
+    #
+    # A real domain, not a .test one: POST /auth/login validates the address
+    # with email-validator, which refuses special-use domains (.test, .invalid,
+    # .localhost). A seeded admin nobody can sign in as is not a seed.
+    SEED_ADMIN_EMAIL: str = "admin@edeeapply.in"
+    SEED_ADMIN_PASSWORD: str = "Test@1234"
+
+    # How long a college or coaching set-password link stays usable. Long
+    # enough to survive a weekend and an admin forwarding it on, short enough
+    # that a link left in an inbox is not a permanent way in.
+    INVITE_TTL_DAYS: int = 14
+
     # How long a minted session cookie stays valid. Firebase allows 5 minutes
     # to 14 days. Eight hours covers a working day; the frontend's two-hour
     # idle logout is what ends an unattended session sooner, and this is the

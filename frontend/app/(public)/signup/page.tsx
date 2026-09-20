@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import FloatingUserMenu from '@/components/shells/FloatingUserMenu';
 import SignupClient from './SignupClient';
 
-export const metadata: Metadata = { title: 'Complete your profile' };
+export const metadata: Metadata = { title: 'Create your account' };
 
 export const dynamic = 'force-dynamic';
 

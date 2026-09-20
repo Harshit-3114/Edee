@@ -258,18 +258,31 @@ if errorlevel 1 (
 popd
 
 rem ---------------------------------------------------------------------------
-rem 6. Seed demo accounts (needs a real Firebase service account)
+rem 6. Seed accounts
+rem
+rem The local admin needs nothing but the database, so it always runs: it is
+rem the one way into a fresh install, and every other account is created
+rem through the product from there. The Firebase demo accounts are extra, and
+rem only possible with a real service account.
 rem ---------------------------------------------------------------------------
 echo.
-echo [6/7] Demo accounts...
+echo [6/7] Accounts...
+pushd "%BACKEND%"
+"%BACKEND%\venv\Scripts\python.exe" -m seeds.local_admin
+if errorlevel 1 (
+    echo [WARN] Admin seed failed. Nobody can reach the admin portal until it runs:
+    echo        "%BACKEND%\venv\Scripts\python.exe" -m seeds.local_admin
+)
+popd
+
 if exist "%BACKEND%\firebase-service-account.json" (
     echo [ok] Firebase service account found - creating one demo account per role...
     pushd "%BACKEND%"
     "%BACKEND%\venv\Scripts\python.exe" -m seeds.users
     popd
 ) else (
-    echo [skip] No firebase-service-account.json in backend\. Sign-in and the demo
-    echo       accounts need a real Firebase project. See backend\.env.example.
+    echo [skip] No firebase-service-account.json in backend\. Google and phone
+    echo       sign-in need a real Firebase project; email and password do not.
 )
 
 rem ---------------------------------------------------------------------------

@@ -26,6 +26,10 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://dev:dev@db:5432/college_platform
       FIREBASE_SERVICE_ACCOUNT_PATH: /app/firebase-service-account.json
+      # Signs email/password session tokens. Left unset here so a laptop just
+      # works; the app warns and signs with a public constant. Production is
+      # the opposite - see docker-compose.prod.yml, which requires it.
+      AUTH_SECRET: ${AUTH_SECRET:-}
       RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID}
       RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET}
       RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET}

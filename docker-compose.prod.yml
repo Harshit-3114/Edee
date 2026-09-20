@@ -42,6 +42,10 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://dev:dev@db:5432/college_platform
       FIREBASE_SERVICE_ACCOUNT_PATH: /app/firebase-service-account.json
+      # Signs every email/password session token. The app refuses to boot
+      # without it rather than fall back to the public development constant,
+      # so compose failing here is the earlier, louder version of that.
+      AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET is required - generate one with `openssl rand -hex 32`}
       RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:?RAZORPAY_KEY_ID is required - copy .env.prod.example to .env and fill it in}
       RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:?RAZORPAY_KEY_SECRET is required - copy .env.prod.example to .env and fill it in}
       RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET:?RAZORPAY_WEBHOOK_SECRET is required - copy .env.prod.example to .env and fill it in}

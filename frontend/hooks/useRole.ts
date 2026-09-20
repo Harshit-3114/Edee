@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { onIdTokenChanged } from 'firebase/auth';
 import { tryGetFirebaseAuth } from '@/lib/firebase';
 import { getDevToken, onDevSessionChanged, parseDevToken } from '@/lib/devSession';
+import { getLocalClaims, onLocalSessionChanged } from '@/lib/localSession';
 import { isRole, type Role } from '@/lib/portals';
 
 interface RoleState {
@@ -19,8 +20,22 @@ const EMPTY: Omit<RoleState, 'loading'> = {
   coachingCentreId: null,
 };
 
-/** Identity from a stored dev token, if any. No Firebase involved. */
-function devState(): Omit<RoleState, 'loading'> {
+/**
+ * Identity from a stored token, if any. No Firebase involved.
+ *
+ * An email/password session wins over a dev token: it is a real credential
+ * the backend will accept in any environment, where a dev token only works on
+ * a laptop with no Firebase keys.
+ */
+function localState(): Omit<RoleState, 'loading'> {
+  const local = getLocalClaims();
+  if (local) {
+    return {
+      role: local.role,
+      collegeId: local.collegeId,
+      coachingCentreId: local.coachingCentreId,
+    };
+  }
   const token = getDevToken();
   const claims = token ? parseDevToken(token) : null;
   if (!claims) return { ...EMPTY };
@@ -44,25 +59,33 @@ export function useRole(): RoleState {
   useEffect(() => {
     const auth = tryGetFirebaseAuth();
     if (!auth) {
-      // No Firebase configured: a stored dev token (if any) is the identity.
-      // Re-sync when dev sign-in/out happens elsewhere on the page.
-      const syncDev = () => {
-        setState({ ...devState(), loading: false });
+      // No Firebase configured - the common case until the key arrives. A
+      // stored email/password or dev token is the identity. Re-sync when a
+      // sign-in or sign-out happens elsewhere on the page.
+      const sync = () => {
+        setState({ ...localState(), loading: false });
       };
-      syncDev();
-      return onDevSessionChanged(syncDev);
+      sync();
+      const stopLocal = onLocalSessionChanged(sync);
+      const stopDev = onDevSessionChanged(sync);
+      return () => {
+        stopLocal();
+        stopDev();
+      };
     }
 
-    const stopDevSync = onDevSessionChanged(() => {
-      // A dev sign-in/out happened elsewhere. A signed-in Firebase user keeps
-      // winning; otherwise fall back to whatever dev token is stored now.
-      if (!auth.currentUser) setState({ ...devState(), loading: false });
-    });
+    const resync = () => {
+      // A sign-in or sign-out happened elsewhere. A signed-in Firebase user
+      // keeps winning; otherwise fall back to whatever token is stored now.
+      if (!auth.currentUser) setState({ ...localState(), loading: false });
+    };
+    const stopLocalSync = onLocalSessionChanged(resync);
+    const stopDevSync = onDevSessionChanged(resync);
 
     const stopAuth = onIdTokenChanged(auth, async (user) => {
       if (!user) {
-        // Signed out of Firebase: fall back to a dev token if one is stored.
-        setState({ ...devState(), loading: false });
+        // Signed out of Firebase: fall back to a stored token if there is one.
+        setState({ ...localState(), loading: false });
         return;
       }
       try {
@@ -82,6 +105,7 @@ export function useRole(): RoleState {
     });
 
     return () => {
+      stopLocalSync();
       stopDevSync();
       stopAuth();
     };

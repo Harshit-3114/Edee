@@ -8,6 +8,8 @@ which is almost never what is wanted.
 """
 from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 from firebase_admin import auth as firebase_auth
 import firebase_admin
@@ -15,8 +17,10 @@ from firebase_admin import credentials
 from uuid import UUID
 import logging
 
+from app.core import local_token
 from app.core.config import settings
 from app.core.devmode import is_dev_mode, parse_dev_token
+from app.db.connection import get_db
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +63,61 @@ VALID_ROLES = {"student", "college", "coaching", "admin"}
 SESSION_HEADER = "X-Session-Cookie"
 
 
+async def _verify_local_token(token: str, db: AsyncSession) -> dict:
+    """
+    Verify a session token minted by the local email/password path.
+
+    Two steps, and both are needed. The signature proves we issued it and that
+    nobody has edited the claims. The row lookup proves the account still
+    exists, is still active, and has not had its sessions revoked since -
+    which is the same guarantee check_revoked=True buys on the Firebase path,
+    for one indexed SELECT instead of a network round trip.
+
+    Role and scope come from the row, not from the token. An admin who moves
+    somebody between colleges, or strips a role, should not have to wait out
+    an eight-hour token for it to mean anything.
+    """
+    claims = local_token.verify(token)
+    if claims is None:
+        raise HTTPException(
+            status_code=401,
+            detail="Session expired, sign in again",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    row = (
+        await db.execute(
+            text(
+                """
+                SELECT role, college_id, coaching_centre_id, active, token_version
+                FROM auth_credentials
+                WHERE uid = :uid
+                """
+            ),
+            {"uid": claims["uid"]},
+        )
+    ).fetchone()
+
+    if row is None:
+        raise HTTPException(status_code=401, detail="Session is no longer valid")
+    if not row.active:
+        raise HTTPException(status_code=403, detail="This account is disabled")
+    if int(claims.get("tv", -1)) != int(row.token_version):
+        raise HTTPException(status_code=401, detail="Session revoked, sign in again")
+
+    return {
+        "uid": claims["uid"],
+        "role": row.role,
+        "college_id": str(row.college_id) if row.college_id else None,
+        "coaching_centre_id": (
+            str(row.coaching_centre_id) if row.coaching_centre_id else None
+        ),
+        # Lets the /auth endpoints tell a local session from a Firebase one
+        # without re-parsing the credential.
+        "local": True,
+    }
+
+
 def _verify_session_cookie(cookie: str) -> dict:
     """Verify a session cookie minted by POST /auth/session."""
     if is_dev_mode():
@@ -89,23 +148,35 @@ def _verify_session_cookie(cookie: str) -> dict:
 async def get_current_user(
     request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer),
+    db: AsyncSession = Depends(get_db),
 ) -> dict:
     """
-    Answers "who is this" from either credential the platform issues.
+    Answers "who is this" from any credential the platform issues.
 
-    Two ways in, verified by two different Firebase calls that cannot be
-    confused for one another:
+    Two ways a credential arrives:
 
-      Authorization: Bearer <id token>   the browser, calling directly
-      X-Session-Cookie: <session cookie> the Next.js server, rendering a page
+      Authorization: Bearer <credential>  the browser, calling directly
+      X-Session-Cookie: <credential>      the Next.js server, rendering a page
 
-    check_revoked=True is not optional on either. Without it, revoking a
-    compromised account's refresh tokens does nothing until the credential
-    expires by itself, leaving an attacker up to an hour of continued access.
-    It costs one lookup.
+    and three kinds of credential it may be: a token from the local
+    email/password path, a dev: token, or a Firebase ID token or session
+    cookie. The local one is tried first because it is the cheapest to reject
+    - a prefix check, then an HMAC - and because it is the path that works
+    while no Firebase service account is configured.
+
+    Whichever path answers, the returned claims have the same shape, so every
+    guard downstream stays indifferent to how somebody signed in.
+
+    check_revoked=True is not optional on the Firebase branches. Without it,
+    revoking a compromised account's refresh tokens does nothing until the
+    credential expires by itself, leaving an attacker up to an hour of
+    continued access. It costs one lookup. The local branch buys the same
+    guarantee with token_version.
     """
     session_cookie = request.headers.get(SESSION_HEADER)
     if session_cookie:
+        if local_token.is_local_token(session_cookie):
+            return await _verify_local_token(session_cookie, db)
         return _verify_session_cookie(session_cookie)
 
     if credentials is None or not credentials.credentials:
@@ -116,6 +187,12 @@ async def get_current_user(
         )
 
     token = credentials.credentials
+
+    # The local email/password path. Available in every environment: it is a
+    # real sign-in method, not a bypass, and it is the only one that works
+    # while no Firebase service account is configured.
+    if local_token.is_local_token(token):
+        return await _verify_local_token(token, db)
 
     # Dev mode (local development without Firebase only): accept
     # self-described dev: tokens. Anything else is rejected here, before it

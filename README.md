@@ -24,7 +24,8 @@ start.bat
 removes a stale `college-platform-db` container; starts Postgres; creates
 `backend\venv` and `frontend\node_modules` only when missing; copies `.env`
 files only when missing; waits for Postgres health; runs migrations and college
-seeds; seeds demo accounts only when a Firebase service account exists; then
+seeds; seeds the local admin, and the Firebase demo accounts only when a
+service account exists; then
 opens backend and frontend server windows and waits until both respond.
 
 Manual setup:
@@ -37,9 +38,10 @@ docker compose up -d db
 cd backend
 python -m venv venv
 venv\Scripts\python -m pip install -r requirements.txt
-copy .env.example .env                             # fill in Firebase and Razorpay
+copy .env.example .env                             # set AUTH_SECRET; Firebase optional
 venv\Scripts\python -m alembic upgrade head
 venv\Scripts\python -m seeds.colleges
+venv\Scripts\python -m seeds.local_admin           # the one account a fresh database needs
 venv\Scripts\python -m seeds.users                 # only with a Firebase service account
 venv\Scripts\python -m uvicorn app.main:app --reload --port 8000
 
@@ -80,8 +82,9 @@ layers stand between a request and the data, and only the last one is security:
 2. The portal layout asks the API who the session cookie belongs to and passes
    the answer to `RoleGate`, which opens on the first paint when it matches.
    This only ever *shortens* the wait; it never widens access.
-3. `RoleGate` re-checks the role against the verified Firebase token in the
-   browser and redirects if it disagrees with either of the above.
+3. `RoleGate` re-checks the role against the verified credential in the
+   browser — a Firebase token or a signed local session token — and redirects
+   if it disagrees with either of the above.
 4. **The API** verifies the credential and the row-level scope on every
    request.
 
@@ -94,6 +97,49 @@ querying another's applicants.
 **Money is paise on the wire.** `college_courses.application_fee` is stored in
 rupees; every endpoint converts at the edge so the API, the checkout, and
 Razorpay all speak one unit.
+
+## Two ways to sign in
+
+Identity used to be Firebase's entirely, which meant that with no service
+account configured nobody could sign in at all. There are now two paths, and
+they run side by side:
+
+| | Email + password | Firebase |
+|---|---|---|
+| Works without a service account | yes | no |
+| Where the password lives | `auth_credentials.password_hash`, bcrypt cost 12 | Firebase's servers |
+| Credential | `edee1.<payload>.<hmac>`, signed by this API | ID token / session cookie |
+| Available to | all four portals | students (Google, phone OTP) |
+| Revocation | `token_version` on the row | `check_revoked=True` |
+
+Both produce the same claims (`uid`, `role`, `college_id`,
+`coaching_centre_id`), so every guard, ownership query and `RoleGate` behaves
+identically whichever one signed you in. Local accounts get a `uid` of
+`local:<uuid>` written into the existing `firebase_uid` columns — the column
+name stays because it becomes accurate again the day a service account
+arrives.
+
+**Only the student portal has signup.** `POST /auth/signup` is the one
+endpoint on the platform where a stranger can create an account, and it is
+hard-coded to students — there is no role field in the body to ask for
+anything else. College and coaching accounts are issued by an admin as a
+single-use set-password link (`/set-password?token=…`); the account does not
+exist until the recipient opens it and chooses a password, so an invite sent
+to the wrong address cannot become an account by itself. Only the sha256 of
+the invite token is stored. The admin account is seeded:
+
+```bash
+cd backend && python -m seeds.local_admin   # refuses to run in production
+```
+
+Sign-in failures all return the same "Email or password is incorrect",
+whether the account is missing, the password is wrong, or the account is
+deactivated — and an unknown address is still checked against a throwaway
+hash, so response time does not answer "does this person have an account
+here" either.
+
+`AUTH_SECRET` signs the local session tokens. Staging and production refuse
+to boot without it.
 
 ## Session cookies and server rendering
 
@@ -161,10 +207,17 @@ freezing an empty catalogue into the page.
 
 ## Development without Firebase (dev mode)
 
-When the backend has no Firebase service account (and `ENVIRONMENT` is
-development), it runs in **dev mode**: the login page mirrors production
-sign-in without Firebase or SMS, and `GET /health` reports it
-(`dev_mode: true`). `start.bat` prints a banner when it detects it.
+Email and password sign-in works with no Firebase at all and in every
+environment — see [Two ways to sign in](#two-ways-to-sign-in). That is the
+realistic path on a laptop without keys, and dev mode is no longer needed for
+it.
+
+Dev mode remains for the case it was built for: throwaway identities that
+create and destroy their own data. When the backend has no Firebase service
+account (and `ENVIRONMENT` is development), it runs in **dev mode**, and
+`GET /health` reports it (`dev_mode: true`). `start.bat` prints a banner when
+it detects it. On the login page the dev panel now sits collapsed under
+"Developer sign-in", below the password form.
 
 - **Students sign in with phone + OTP, like production.** Enter any 10
   digits, then any 4 digits on the code screen — no Firebase, no SMS. The
@@ -206,7 +259,7 @@ integration, including two issues that were giving away free applications.
 |------|------------|
 | **API** | FastAPI 0.115 (async) |
 | **DB** | PostgreSQL 16 (asyncpg) |
-| **Migrations** | Alembic (9 migrations: 001–009) |
+| **Migrations** | Alembic (10 migrations: 001–010) |
 | **Rendering** | Next.js 16 App Router — portal pages server-rendered via session cookie |
 | **Auth** | Firebase Admin SDK (JWT verification); phone OTP in production, any-4-digits mirror in dev |
 | **Payments** | Razorpay (order creation + webhook) |
@@ -298,8 +351,8 @@ edee/
 │  │  ├─ services/      # Razorpay client, Firebase role claims, email, lead files
 │  │  ├─ uploads/       # college logos served at /uploads (gitignored, volume-backed)
 │  │  └─ main.py        # FastAPI entry point
-│  ├─ migrations/        # Alembic 001–009
-│  ├─ seeds/             # colleges, demo role accounts
+│  ├─ migrations/        # Alembic 001–010
+│  ├─ seeds/             # colleges, the local admin, demo role accounts
 │  ├─ tests/             # pytest suite
 │  ├─ Dockerfile
 │  ├─ requirements.txt
@@ -474,6 +527,17 @@ Backend `.env`:
 ```text
 DATABASE_URL=postgresql+asyncpg://dev:dev@localhost:5433/college_platform
 FIREBASE_SERVICE_ACCOUNT_PATH=./firebase-service-account.json
+# Signs the session tokens the email/password path issues. Nothing to do with
+# Firebase - it is what lets people sign in while no service account exists.
+# `openssl rand -hex 32`. Staging and production REFUSE TO BOOT without it;
+# development falls back to a public constant and warns loudly.
+AUTH_SECRET=
+# The account `python -m seeds.local_admin` creates. Must be a real domain:
+# the login endpoint rejects .test and .localhost.
+# SEED_ADMIN_EMAIL=admin@edeeapply.in
+# SEED_ADMIN_PASSWORD=Test@1234
+# Days a college/coaching set-password link stays usable.
+# INVITE_TTL_DAYS=14
 RAZORPAY_KEY_ID=
 RAZORPAY_KEY_SECRET=
 RAZORPAY_WEBHOOK_SECRET=
@@ -510,14 +574,29 @@ Razorpay secrets or Firebase service-account credentials there.
 
 Auth and session:
 
-- `POST /auth/session` — exchange a verified Firebase ID token for a session
-  cookie. Called by the Next.js route handler, never by the browser directly.
+- `POST /auth/session` — exchange a credential for a session cookie. A Firebase
+  ID token is verified and swapped for one; a local session token is returned
+  as its own. Called by the Next.js route handler, never by the browser.
 - `DELETE /auth/session` — revoke every session the account holds
 - `GET /auth/me` — the verified claims behind the current credential; this is
   what lets the server open the role gate before hydration
 
-Every authenticated endpoint accepts either `Authorization: Bearer <id token>`
-or `X-Session-Cookie: <session cookie>`.
+Email and password:
+
+- `POST /auth/signup` — create a student account (name, email, phone,
+  password). The only signup on the platform, and students only.
+- `POST /auth/login` — email and password for any of the four portals; the
+  response carries the role, and the caller decides where to send them
+- `POST /auth/password` — change your own password; drops every other session
+- `POST /auth/invites` — admin only; issues a college or coaching
+  set-password link
+- `GET /auth/invites/{token}` — what the set-password page renders
+- `POST /auth/invites/{token}/accept` — choose a password; creates the
+  credential and the staff row together, once
+
+Every authenticated endpoint accepts either `Authorization: Bearer <credential>`
+or `X-Session-Cookie: <credential>`, where the credential is a Firebase ID
+token, a Firebase session cookie, or an `edee1.` local session token.
 
 Students:
 

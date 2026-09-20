@@ -16,8 +16,16 @@ interface Org {
 /**
  * The only screen in the product that grants access.
  *
- * One request creates the Firebase user, the platform_users row, and the role
- * claim. The role and its organisation are chosen together because the database
+ * College and coaching accounts are issued as a single-use set-password link.
+ * Nothing exists until the recipient opens it and chooses a password, so an
+ * invite sent to the wrong address cannot become an account by itself. The
+ * link is shown here as well as emailed, because outbound mail is best-effort
+ * and an admin should never be stuck waiting on it.
+ *
+ * Admin accounts still go through Firebase, unchanged - there is no invite
+ * path to platform staff on purpose.
+ *
+ * The role and its organisation are chosen together because the database
  * rejects a college account with no college attached.
  */
 export default function UserRoleForm({ onCreated }: { onCreated: () => void }) {
@@ -30,8 +38,12 @@ export default function UserRoleForm({ onCreated }: { onCreated: () => void }) {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [inviteUrl, setInviteUrl] = useState('');
+  const [copied, setCopied] = useState(false);
 
   const needsOrg = role === 'college' || role === 'coaching';
+  // Everything but admin is provisioned by invite.
+  const byInvite = needsOrg;
 
   useEffect(() => {
     if (!needsOrg) {
@@ -64,6 +76,8 @@ export default function UserRoleForm({ onCreated }: { onCreated: () => void }) {
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     setFormError('');
+    setInviteUrl('');
+    setCopied(false);
 
     const next: Record<string, string> = {};
     if (name.trim().length < 2) next.name = 'Enter the person’s full name.';
@@ -76,21 +90,48 @@ export default function UserRoleForm({ onCreated }: { onCreated: () => void }) {
 
     setBusy(true);
     try {
-      await api.post('/admin/users', {
-        name: name.trim(),
-        email: email.trim().toLowerCase(),
-        role,
-        college_id: role === 'college' ? orgId : null,
-        coaching_centre_id: role === 'coaching' ? orgId : null,
-      });
+      if (byInvite) {
+        const { data } = await api.post('/auth/invites', {
+          name: name.trim(),
+          email: email.trim().toLowerCase(),
+          role,
+          college_id: role === 'college' ? orgId : null,
+          coaching_centre_id: role === 'coaching' ? orgId : null,
+        });
+        setInviteUrl(data.url);
+      } else {
+        await api.post('/admin/users', {
+          name: name.trim(),
+          email: email.trim().toLowerCase(),
+          role,
+          college_id: null,
+          coaching_centre_id: null,
+        });
+      }
       setName('');
       setEmail('');
       setOrgId('');
       onCreated();
     } catch (err) {
-      setFormError(apiErrorMessage(err, 'Could not create the account.'));
+      setFormError(
+        apiErrorMessage(
+          err,
+          byInvite ? 'Could not create the invite.' : 'Could not create the account.',
+        ),
+      );
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function copyInvite() {
+    try {
+      await navigator.clipboard.writeText(inviteUrl);
+      setCopied(true);
+    } catch {
+      // Clipboard access can be refused outright. The link is on screen and
+      // selectable, so there is still a way to hand it over.
+      setCopied(false);
     }
   }
 
@@ -102,8 +143,10 @@ export default function UserRoleForm({ onCreated }: { onCreated: () => void }) {
     >
       <h2 className="text-sm font-medium">Create a staff account</h2>
       <p className="mt-1 text-[13px] text-[var(--text-secondary)]">
-        The person signs in with this email. Students sign themselves up and are not
-        created here.
+        {byInvite
+          ? 'They get a one-time link to choose their own password. The account exists once they use it.'
+          : 'The person signs in with this email.'}{' '}
+        Students sign themselves up and are not created here.
       </p>
 
       <div className="mt-4 grid gap-4 sm:grid-cols-2">
@@ -181,9 +224,27 @@ export default function UserRoleForm({ onCreated }: { onCreated: () => void }) {
         </div>
       )}
 
+      {inviteUrl && (
+        <div className="mt-4 rounded-lg border border-[var(--line)] bg-[var(--surface-sunken)] p-4">
+          <p className="text-[13px] font-medium">Invite link</p>
+          <p className="mt-1 text-[13px] text-[var(--text-secondary)]">
+            Emailed to them as well. It works once, and this is the only time it is
+            shown — reissue if it gets lost.
+          </p>
+          <code className="mt-3 block break-all rounded border border-[var(--line)] bg-[var(--surface-raised)] px-3 py-2 text-[12px]">
+            {inviteUrl}
+          </code>
+          <div className="mt-3">
+            <Button type="button" variant="secondary" onClick={copyInvite}>
+              {copied ? 'Copied' : 'Copy link'}
+            </Button>
+          </div>
+        </div>
+      )}
+
       <div className="mt-5">
         <Button type="submit" loading={busy}>
-          Create account
+          {byInvite ? 'Send invite' : 'Create account'}
         </Button>
       </div>
     </form>

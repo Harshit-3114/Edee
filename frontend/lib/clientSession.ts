@@ -1,6 +1,7 @@
 'use client';
 
 import { getDevToken } from './devSession';
+import { getLocalToken } from './localSession';
 import { tryGetFirebaseAuth } from './firebase';
 import { logger } from './logger';
 
@@ -23,9 +24,12 @@ const SESSION_ENDPOINT = '/auth/session';
 export async function startServerSession(): Promise<void> {
   try {
     const user = tryGetFirebaseAuth()?.currentUser;
-    // Dev sessions have no Firebase user; the dev token is its own credential
-    // and the backend parses it the same way on both paths.
-    const idToken = user ? await user.getIdToken() : getDevToken();
+    // Email/password and dev sessions have no Firebase user. Their tokens are
+    // their own credential, and POST /auth/session hands each one straight
+    // back as the session rather than exchanging it for anything.
+    const idToken = user
+      ? await user.getIdToken()
+      : (getLocalToken() ?? getDevToken());
     if (!idToken) return;
 
     await fetch(SESSION_ENDPOINT, {

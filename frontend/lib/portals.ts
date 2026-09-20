@@ -39,14 +39,15 @@ export const PORTAL_LABEL: Record<Role, string> = {
 /**
  * Paths the edge guard lets through untouched.
  *
- * /signup is here because it needs a Firebase account but not yet a role - it
- * is the screen where a new student earns one. The page redirects to /login
- * itself if nobody is signed in.
+ * /signup is here because it is where a new student earns a role and so cannot
+ * require one. /set-password is the same for staff: the invite link is the only
+ * credential its visitor has, and the account does not exist until they finish.
  */
 export const PUBLIC_PATHS: readonly string[] = [
   '/',
   '/login',
   '/signup',
+  '/set-password',
   '/unauthorised',
 ];
 

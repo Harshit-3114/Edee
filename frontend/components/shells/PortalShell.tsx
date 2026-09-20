@@ -27,7 +27,7 @@ export default function PortalShell({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, signOut } = useAuth();
+  const { signedIn, signOut } = useAuth();
   const [open, setOpen] = useState(false);
 
   const items = PORTAL_NAV[role];
@@ -88,7 +88,7 @@ export default function PortalShell({
 
           <div className="ml-auto flex items-center gap-2 md:gap-3">
             <div className="hidden sm:block">
-              <NotificationBell enabled={Boolean(user)} />
+              <NotificationBell enabled={signedIn} />
             </div>
             <UserMenu />
 

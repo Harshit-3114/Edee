@@ -12,6 +12,7 @@ import {
   UsersThree,
 } from '@phosphor-icons/react/dist/ssr';
 import GoogleSignIn from '@/components/auth/GoogleSignIn';
+import PasswordForm from '@/components/auth/PasswordForm';
 import DevSignIn, { useDevBypass } from '@/components/auth/DevSignIn';
 import DevOTPForm from '@/components/auth/DevOTPForm';
 import SiteFooter from '../_components/SiteFooter';
@@ -40,10 +41,12 @@ const PORTAL_OPTIONS: { role: Role; hint: string; Icon: typeof GraduationCap }[]
 ];
 
 const PORTAL_HELP: Record<Role, string> = {
-  student: 'Sign in with Google or your mobile number to reach your applications.',
-  college: 'Use the account your college provided. New college accounts are created by the platform team.',
+  student:
+    'Sign in with your email and password, or with Google or your mobile number.',
+  college:
+    'Use the email and password your college account was set up with. New college accounts are created by the platform team.',
   coaching:
-    'Use the account your coaching centre provided. New centre accounts are created by the platform team.',
+    'Use the email and password your centre account was set up with. New centre accounts are created by the platform team.',
   admin: 'Platform staff only. Your account already carries the admin role.',
 };
 
@@ -75,9 +78,15 @@ function LoginForm() {
     router.replace(`/login?${search.toString()}`);
   }
 
-  async function route(signedIn: User) {
+  /**
+   * Where to go once somebody is signed in, whichever way they did it.
+   *
+   * Split out of route() so the password form can reach it too: that path has
+   * no Firebase user to read a claim from, but the decision afterwards - right
+   * portal, wrong portal, or finish signing up - is identical.
+   */
+  async function routeToRole(role: Role | null) {
     setRouting(true);
-    const role = await syncSessionCookie(signedIn);
     // Hand the server a credential of its own, so the portal page they are
     // about to land on can render with its data already in it.
     await startServerSession();
@@ -100,6 +109,11 @@ function LoginForm() {
       return;
     }
     router.replace(action.path);
+  }
+
+  async function route(signedIn: User) {
+    setRouting(true);
+    await routeToRole(await syncSessionCookie(signedIn));
   }
 
   // Already signed in? Do not make them do it twice.
@@ -177,36 +191,77 @@ function LoginForm() {
         })}
       </div>
 
+      {/* Email and password, for every portal. The only method that works
+          without Firebase, and the only one staff accounts have at all. */}
+      <PasswordForm onSuccess={routeToRole} onError={setError} />
+
       {devBypass === null ? (
         <div className="flex flex-col gap-3" role="status" aria-live="polite">
           <span className="sr-only">Loading sign-in</span>
           <Skeleton className="h-10 w-full" />
-          <Skeleton className="h-10 w-full" />
         </div>
-      ) : devBypass ? (
-        // Students sign in the way the site works in production - phone
-        // number plus a short code - except dev accepts any 4 digits and no
-        // SMS leaves the laptop. Staff portals keep the directory picker.
-        portal === 'student' ? (
-          <DevOTPForm
-            onSuccess={() => void router.replace(next ?? '/student/dashboard?welcome=1')}
-            onError={setError}
-          />
-        ) : (
-          <DevSignIn />
-        )
       ) : (
         <>
-          <PhoneOTPForm onSuccess={route} onError={setError} />
+          {/* Phone and Google sit alongside the password, not instead of it,
+              and only for students - staff accounts have neither. They need a
+              configured Firebase project, so they are hidden when the backend
+              reports dev mode rather than rendering forms that can only fail. */}
+          {portal === 'student' && !devBypass && (
+            <>
+              <div className="flex items-center gap-3 text-xs text-[var(--text-muted)]">
+                <span className="h-px flex-1 bg-[var(--line)]" />
+                or
+                <span className="h-px flex-1 bg-[var(--line)]" />
+              </div>
 
-          <div className="flex items-center gap-3 text-xs text-[var(--text-muted)]">
-            <span className="h-px flex-1 bg-[var(--line)]" />
-            or
-            <span className="h-px flex-1 bg-[var(--line)]" />
-          </div>
+              <PhoneOTPForm onSuccess={route} onError={setError} />
 
-          <GoogleSignIn onSuccess={route} onError={setError} />
+              <div className="flex items-center gap-3 text-xs text-[var(--text-muted)]">
+                <span className="h-px flex-1 bg-[var(--line)]" />
+                or
+                <span className="h-px flex-1 bg-[var(--line)]" />
+              </div>
+
+              <GoogleSignIn onSuccess={route} onError={setError} />
+            </>
+          )}
+
+          {/* The dev bypass is still here, just no longer the only way in.
+              Collapsed, because on a laptop with no Firebase keys the password
+              form above is now the realistic path. */}
+          {devBypass && (
+            <details className="rounded-lg border border-[var(--line)] px-3 py-2">
+              <summary className="cursor-pointer text-[13px] text-[var(--text-secondary)]">
+                Developer sign-in
+              </summary>
+              <div className="mt-3 flex flex-col gap-3">
+                {portal === 'student' ? (
+                  <DevOTPForm
+                    onSuccess={() =>
+                      void router.replace(next ?? '/student/dashboard?welcome=1')
+                    }
+                    onError={setError}
+                  />
+                ) : (
+                  <DevSignIn />
+                )}
+              </div>
+            </details>
+          )}
         </>
+      )}
+
+      {/* Signup is a student-only door. Staff accounts are created by an admin
+          and arrive as a set-password link, so there is nothing to offer here
+          for the other three portals. */}
+      {portal === 'student' && (
+        <p className="text-[13px] leading-relaxed text-[var(--text-secondary)]">
+          New here?{' '}
+          <Link href="/signup" className="font-medium underline">
+            Create a student account
+          </Link>
+          .
+        </p>
       )}
 
       {error && <ErrorState message={error} />}
@@ -260,8 +315,9 @@ export default function LoginClient() {
           </Suspense>
 
           <p className="text-[13px] leading-relaxed text-[var(--text-muted)]">
-            New here? Signing in with your mobile number creates your student account.
-            College and coaching accounts are created by the platform team.
+            Students can create an account from the sign-in screen. College and
+            coaching accounts are created by the platform team, which sends a link
+            to set your password.
           </p>
         </div>
       </main>

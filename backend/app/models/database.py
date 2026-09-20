@@ -435,3 +435,83 @@ class CoachingStudent(Base):
             name="coaching_student_status_check",
         ),
     )
+
+class AuthCredential(Base):
+    """
+    An email/password account.
+
+    `uid` is the bridge to everything else: it is written into the
+    `firebase_uid` column of whichever identity table matches the role
+    (students, college_admins, coaching_center_admins, platform_users), so
+    ownership queries and role guards never need to know which sign-in path
+    produced the identity holding them.
+    """
+
+    __tablename__ = "auth_credentials"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    uid = Column(Text, unique=True, nullable=False)
+    email = Column(Text, unique=True, nullable=False)
+    password_hash = Column(Text, nullable=False)
+    role = Column(Text, nullable=False)
+    college_id = Column(UUID(as_uuid=True), ForeignKey("colleges.id"))
+    coaching_centre_id = Column(UUID(as_uuid=True), ForeignKey("coaching_centers.id"))
+    active = Column(Boolean, nullable=False, default=True, server_default=text("true"))
+    # Rides in every token issued to this account. Bumping it invalidates all
+    # of them at once - the local equivalent of revoking refresh tokens.
+    token_version = Column(Integer, nullable=False, default=0, server_default=text("0"))
+    created_at = Column(DateTime(timezone=True), default=_utcnow, server_default=func.now())
+    password_changed_at = Column(
+        DateTime(timezone=True), default=_utcnow, server_default=func.now()
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "role IN ('student', 'college', 'coaching', 'admin')",
+            name="auth_credential_role_check",
+        ),
+        CheckConstraint(
+            "(role <> 'college') OR (college_id IS NOT NULL)",
+            name="auth_credential_college_scope",
+        ),
+        CheckConstraint(
+            "(role <> 'coaching') OR (coaching_centre_id IS NOT NULL)",
+            name="auth_credential_coaching_scope",
+        ),
+    )
+
+
+class AuthInvite(Base):
+    """
+    A single-use set-password link for a college or coaching account.
+
+    Only the hash of the token is here. The token itself is in the link the
+    admin copies, and nowhere else, so this table leaking does not hand
+    anybody a staff account.
+    """
+
+    __tablename__ = "auth_invites"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    token_hash = Column(Text, unique=True, nullable=False)
+    email = Column(Text, nullable=False)
+    name = Column(Text, nullable=False)
+    role = Column(Text, nullable=False)
+    college_id = Column(UUID(as_uuid=True), ForeignKey("colleges.id"))
+    coaching_centre_id = Column(UUID(as_uuid=True), ForeignKey("coaching_centers.id"))
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    used_at = Column(DateTime(timezone=True))
+    created_by = Column(UUID(as_uuid=True))
+    created_at = Column(DateTime(timezone=True), default=_utcnow, server_default=func.now())
+
+    __table_args__ = (
+        CheckConstraint("role IN ('college', 'coaching')", name="auth_invite_role_check"),
+        CheckConstraint(
+            "(role <> 'college') OR (college_id IS NOT NULL)",
+            name="auth_invite_college_scope",
+        ),
+        CheckConstraint(
+            "(role <> 'coaching') OR (coaching_centre_id IS NOT NULL)",
+            name="auth_invite_coaching_scope",
+        ),
+    )

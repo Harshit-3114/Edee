@@ -5,6 +5,7 @@ import axios, {
 } from 'axios';
 import { tryGetFirebaseAuth } from './firebase';
 import { getDevToken } from './devSession';
+import { getLocalToken } from './localSession';
 import { logger } from './logger';
 
 type RetriableConfig = InternalAxiosRequestConfig & { _retried?: boolean };
@@ -19,17 +20,20 @@ function logPath(config: { url?: string }): string {
   return config.url?.split('?')[0] ?? '?';
 }
 
-/** Attach an identity to every request: the Firebase JWT when signed in,
- *  otherwise a locally stored dev token (dev mode only; the backend rejects
- *  dev tokens everywhere else). */
+/** Attach an identity to every request.
+ *
+ *  Three kinds, in the order they win: the Firebase JWT when signed in, then
+ *  an email/password session token, then a dev token (dev mode only; the
+ *  backend rejects those everywhere else). Firebase first because when both
+ *  exist it is the one that was refreshed most recently. */
 api.interceptors.request.use(async (config) => {
   const user = tryGetFirebaseAuth()?.currentUser;
   if (user) {
     const token = await user.getIdToken();
     config.headers.Authorization = `Bearer ${token}`;
   } else {
-    const devToken = getDevToken();
-    if (devToken) config.headers.Authorization = `Bearer ${devToken}`;
+    const token = getLocalToken() ?? getDevToken();
+    if (token) config.headers.Authorization = `Bearer ${token}`;
   }
   logger.debug('API →', config.method?.toUpperCase(), logPath(config));
   return config;

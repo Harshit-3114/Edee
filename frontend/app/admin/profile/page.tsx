@@ -19,7 +19,7 @@ import { useRole } from '@/hooks/useRole';
  * page that renders them and PORTAL_NAV.admin is the list to filter.
  */
 export default function AdminProfilePage() {
-  const { user } = useAuth();
+  const { user, local, email } = useAuth();
   const { role } = useRole();
   const sections = PORTAL_NAV.admin;
 
@@ -34,16 +34,16 @@ export default function AdminProfilePage() {
         <Panel title="Identity">
           <DetailList>
             <DetailItem label="Email">
-              {user?.email ?? <span className="text-[var(--text-muted)]">Not available</span>}
+              {email ?? <span className="text-[var(--text-muted)]">Not available</span>}
             </DetailItem>
             <DetailItem label="Account ID" mono>
-              {user?.uid ?? <span className="text-[var(--text-muted)]">Not available</span>}
+              {user?.uid ?? local?.uid ?? <span className="text-[var(--text-muted)]">Not available</span>}
             </DetailItem>
             <DetailItem label="Role">
               <Badge tone="action">{role ?? 'admin'}</Badge>
             </DetailItem>
             <DetailItem label="Signed in with">
-              {user?.providerData?.[0]?.providerId ?? 'Developer token'}
+              {user?.providerData?.[0]?.providerId ?? (local ? 'Email and password' : 'Developer token')}
             </DetailItem>
           </DetailList>
         </Panel>

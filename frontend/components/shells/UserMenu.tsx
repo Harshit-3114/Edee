@@ -25,7 +25,7 @@ export const PROFILE_PATH: Record<Role, string> = {
  */
 export default function UserMenu() {
   const { role, loading } = useRole();
-  const { user } = useAuth();
+  const { email } = useAuth();
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -53,8 +53,8 @@ export default function UserMenu() {
 
   if (loading || !role) return null;
 
-  // Dev-token sessions have no Firebase user, so fall back to the role.
-  const initial = (user?.email?.[0] ?? role[0]).toUpperCase();
+  // Dev-token sessions carry no address at all, so fall back to the role.
+  const initial = (email?.[0] ?? role[0]).toUpperCase();
 
   return (
     <div ref={panelRef} className="relative">
@@ -83,7 +83,7 @@ export default function UserMenu() {
             />
             <div className="min-w-0">
               <p className="truncate text-sm font-medium text-[var(--text-primary)]">
-                {user?.email ?? `${PORTAL_LABEL[role]} account`}
+                {email ?? `${PORTAL_LABEL[role]} account`}
               </p>
               <p className="mt-0.5 text-[13px] text-[var(--text-secondary)]">
                 {PORTAL_LABEL[role]}

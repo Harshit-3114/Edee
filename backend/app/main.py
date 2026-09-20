@@ -51,6 +51,14 @@ async def lifespan(app: FastAPI):
                 "refusing to boot: ENVIRONMENT=%s but no Firebase service "
                 "account is configured" % settings.ENVIRONMENT
             )
+        # The local password path signs its own session tokens. Without a
+        # secret it would fall back to the public development constant, which
+        # means anyone who has read the source can mint an admin session.
+        if not settings.AUTH_SECRET:
+            raise RuntimeError(
+                "refusing to boot: ENVIRONMENT=%s but AUTH_SECRET is not set"
+                % settings.ENVIRONMENT
+            )
     if is_dev_mode():
         log_dev_mode_once()
     await init_db()
