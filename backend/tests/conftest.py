@@ -17,6 +17,12 @@ The suite skips when Postgres is unreachable, so a machine without Docker
 running gets a clean skip rather than a wall of connection errors.
 """
 import os
+
+# Must be set before importing app.main -> app.core.config -> Settings()
+os.environ.setdefault("SEED_ADMIN_EMAIL", "admin@test.example")
+os.environ.setdefault("SEED_ADMIN_PASSWORD", "Test@1234")
+os.environ.setdefault("AUTH_SECRET", "test-auth-secret-for-tests-only")
+
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport

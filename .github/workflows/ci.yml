@@ -98,6 +98,9 @@ jobs:
 
       - name: Validate production compose merge
         env:
+          AUTH_SECRET: ci-auth-secret-for-tests-only
+          SEED_ADMIN_EMAIL: admin@ci.test
+          SEED_ADMIN_PASSWORD: Test@1234
           RAZORPAY_KEY_ID: ci
           RAZORPAY_KEY_SECRET: ci
           RAZORPAY_WEBHOOK_SECRET: ci
