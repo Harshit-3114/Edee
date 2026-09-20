@@ -31,8 +31,9 @@ class Settings(BaseSettings):
     # A real domain, not a .test one: POST /auth/login validates the address
     # with email-validator, which refuses special-use domains (.test, .invalid,
     # .localhost). A seeded admin nobody can sign in as is not a seed.
-    SEED_ADMIN_EMAIL: str = "admin@edeeapply.in"
-    SEED_ADMIN_PASSWORD: str = "Test@1234"
+    # Must be set via environment variable.
+    SEED_ADMIN_EMAIL: str
+    SEED_ADMIN_PASSWORD: str
 
     # How long a college or coaching set-password link stays usable. Long
     # enough to survive a weekend and an admin forwarding it on, short enough

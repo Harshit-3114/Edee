@@ -1,0 +1,2206 @@
+ make it so that when you signup from student using phone number email passsword and name the password should be stored as a hash 
+  similarly when you login using to college using email and passwothe password should be stored as a hash similarly when you login using to Coaching  using email and password the password should be stored as a hash similarly when you login using to amdin using email and password the password should be stored as a hash and only the student portal should have a signup option
+
+  Ran 12 shell commands
+
+This is a bigger architectural change than it looks — right now
+there are no passwords in this app at all. Let me check the design
+skill and then confirm direction with you.
+
+● Skill(superpowers:brainstorming)
+Successfully loaded skill
+
+  Ran 2 shell commands
+
+Classification: architectural. Here's why — this isn't adding a hash function to an existing password flow; there are no passwords in this app at all today.
+
+What's actually there now:
+- Identity is 100% Firebase. backend/app/middleware/auth.py:110        verifies Firebase ID tokens / session cookies; every table keys  off firebase_uid (students, college_admins,
+  coaching_center_admins, platform_users).
+- Sign-in is phone OTP + Google only (Lo
+- /signup is not a signup — it's "complete your profile" after         Firebase already authenticated you (SignupClient.tsx:20-27). It  shared by all roles conceptually, though only students reach it.
+- The only password in the repo is seeds/users.py:26 (Test@1234),
+  handed to Firebase's create_user — Fir
+                                                                     So "store the password as a hash" means standing up an app-owned credential store and session layer, and retiring or sidelining
+Firebase as the identity source. Before I design that, one decision  drives everything:                                               
+● User declined to answer questions
+· Passwords don't exist in this app today — Firebase owns identity. Where should the password hash actually live? 
+(App-owned auth, drop Firebase (Recommended) / Firebase
+Email/Password provider / Hybrid: our hash, Firebase sessi· Today college/coaching/admin accounts are created by t
+platform team in Firebase. With passwords, who sets the initial
+password? (Admin sets it at creation (Recommended) / Emailinvite link / Out of scope for now)                     
+· Student signup currently requires Google/phone OTP first. If we
+move to email+password, what happens to those? (Remove botpassword only (Recommended) / Keep them alongside passwo
+phone OTP, drop Google)
+                                                               
+What would you like to clarify? Happy to explain any of the three in
+more detail, or reframe them if I've mischaracterised what yo
+after.
+                                                              quick reference, the three decisions I was probing:                                                            Who holds the hash — us (new table + oFirebase retired) vs. Firebase's email/password provider (they hold it, we change almost nothing) vs. a hybrid.
+2. Staff passwords — college/coaching/admin accounts have no self-signup by design, so someone has to set their first       password. Admin-at-creation, emailed invite link, or leave it toseeds for now.                                                 Phone OTP and Google sign-in — whether email+password replacesthem entirely or sits alongside.                               
+Tell me what's unclear or what you'd already decided, and I'lork the questions.                                                                                téed for 1m 52s · done 4:02 PM                                 
+❯ 1.the hash will be stored in our database 2.only seed the admdentials and we seen the invite links for the coaching and     lages 3.sits alongside also we are doing this because we still
+  havent recieved the firebasse api key so dont remove anythingebase as we will change this setup onece we have the firebase                                                                 d — that changes the shape substantially, and for the better.s now additive: a local email+password path that works without ebase key, living beside the existing Firebase phone/Google path,
+which stays untouched. Let me verify a few mechanics before Iign in front of you.                                                                               4 shell commands                                              
+Design confirmed against the code. Here's what I propose —   hitectural, so I'll want your yes before touching anything, andn I'll write it up as a spec.
+                                                              core trick                                                    
+Every table already keys identity off a firebase_uid text col every guard (require_roles, current_college_id,               rent_coaching_centre_id) reads a claims dict. So I don't touch
+any of that. Local accounts get a uid of the form local:<uuidtten into those same columns, and the local login path pr same shape of claims dict. Firebase stay                                                               Credential store — migration 010
+                                                             h_credentials — id, uid (local:<uuid>, unique), email (unique, ercased), password_hash, role (checked against the four roles),
+college_id / coaching_centre_id (FKs, with a check that      lege/coaching roles must have theirs), active, token_version,  ated_at, password_changed_at.
+                                                             en_version is the revocation lever: it's embedded in the token,bumping it kills every outstanding session instantly. That's the
+local equivalent of the check_revoked=True guarantee         dleware/auth.py currently leans on.                                                               k), email, name, role (college|coaching only), the org FK,     ires_at, used_at, created_by.
+                                                             Hashing — app/services/passwords.py                                                               slib — it's unmaintained and its bcrypt backend is broken againypt 4.x. Say the word if you'd rather have argon2id.
+                                                             Session token — app/core/local_token.py                                                           : edee1.<payload>.<hmac-sha256>, carrying uid, role, the org   , token_version, iat, exp. ~40 lines of stdlib hmac/base64 rather
+than PyJWT — one less dependency, and no alg header means no orithm-confusion class of bug.                                 
+Signed with a new AUTH_SECRET setting. Staging/production reft without it, matching how app.main's lifespan already fails   sed on a missing service account. Development falls back to a
+constant with a loud warning.                                                                                               Middleware — one new branch
+                                                             _current_user and _verify_session_cookie each try the local tokst (cheapest — no network), then fall through to the existing
+dev: and Firebase branches, both unchanged. Verification is  nature + expiry + one DB SELECT confirming active and a matchinen_version.
+                                                             
+That SELECT is the one invasive bit: get_current_user needs a Depends(get_db) it doesn't have today. Call sites don't change. It's
+still strictly cheaper than the Firebase path, which makes a  network call per request.                                           
+                                                              5. Endpoints — extending routers/auth.py                            
+                                                              Endpoint: POST /auth/signup                                          Notes: Student only, hard-coded. Creates auth_credentials + s
+in one transaction. Rate-limited.                             ────────────────────────────────────────                             Endpoint: POST /auth/login                                   
+Notes: {email, password, portal}. Generic "Email or password iincorrect" on every failure — no user enumeration. Role/portal      
+mismatch reuses the wrong-portal signal the UI already renders────────────────────────────────────────                             Endpoint: POST /auth/invites                                 
+Notes: Admin only → returns the one-time link.                ────────────────────────────────────────                             Endpoint: GET /auth/invites/{token}                          Notes: Public; renders the set-password page or 404s.
+────────────────────────────────────────
+Notes: Creates the credential + the                           college_admins/coaching_center_admins row. Single-use.               ────────────────────────────────────────                     Endpoint: POST /auth/password
+Notes: Change own password; bumps token_versi
+POST /auth/session gains a local-token branch that returns it own session — exactly what the dev branch already does — so          app/auth/session/route.ts and the whole SSR cookie path need changes at all.
+                                                              6. Frontend                                                                                                                       - New components/auth/PasswordForm.tsx, shared by all four portals.
+- ?portal=student → password form alongside t
+  password form only.                                         - /signup becomes dual-mode: no Firebase user present → real signup    (name, email, phone, password, confirm, stream, invite code  Firebase user present → today's exact "complete your profile"
+  flow, unchanged.
+- New lib/localSession.ts mirroring devSession.ts (localStorag  token + the role cookie proxy.ts reads). useRole, useAuth and        startServerSession gain it as a fallback source, the same w  already fall back to dev tokens.
+- Signup only on student: the "Create a stude
+  existing "accounts are created by the platform team" copy.                                                                       7. Seeds & tests                                             
+seeds/users.py keeps its Firebase path and ga
+admin through invite links, as you said. Password from        SEED_ADMIN_PASSWORD, defaulting to the current Test@1234, still      refusing to run in production.                               
+Tests cover: hash round-trip and wrong passwo
+rejecting a forged one; signup atomicity and duplicate email/pwrong-portal login; invite single-use and expiry; and a student      token being refused by a college endpoint.                   
+---
+Three things I'd like a read on before I write the spec:                                                                           1. Dual-mode /signup — one page that's a real signup without    Firebase and a profile-completion with it. Alternative is two
+   separate pages. I lean dual-mode; it keeps
+3. AUTH_SECRET fail-closed in production — refusing to boot wi   it is my default. Speak up if that'll break a deploy you have        running.                                                  
+✻ Worked for 2m 11s · done 4:08 PM
+❯ 1. the path withought firebase is also suppose to be valid pat2.bcrypt 3.keep it as default                                                                                                     Good — all three settled, and noted that the Firebase-less path is a
+first-class path, not a degraded fallback. Th
+                                                              Writing the spec now, then implementing.                                                                                          Ran 3 shell commands
+
+Wrote 198 lines to ..\docs\superpowers\specs\2026-09-20-locl-password-auth-design.md                                         # Local password authentication                       
+**Status:** approved, ready for implem
+## Why                                                 The Firebase API key has not arrived. Every identity p        ath in the platform                                   currently runs through Firebase: `middleware/auth.py`
+tokens and session cookies, and each i
+… +280 lines                                                                                                                    Spec committed to                                            docs/superpowers/specs/2026-09-20-local-password-auth-design.md. Now
+building it.
+  Ran 2 shell commands                                                                                                               Write(~\OneDrive\Desktop\Edee\backend\app\services\passwords.Wrote 72 lines to ..\backend\app\services\passwords.py
+"""
+bcrypt directly, not passlib. Passlib is unmaintained  and its bcrypt backend                                        t it would have wrapped                               anyway, and the API here is three functions.
+Nothing in this module knows about rol
+password into a hash and checks one against the other, """                                                           … +84 lines                                               
+● Write(~\OneDrive\Desktop\Edee\backend\app\core\local_token.py)Wrote 143 lines to ..\backend\app\core\local_token.py             """                                                   
+Session tokens for the local password path.            Firebase mints session cookies. Without a service acco        unt it cannot, and the                                
+password path still needs a credential the browser can verify on the next request. This mints one:                                                                         
+    edee1.<base64url payload>.<base64url hmac-sha256>
+Deliberately not a JWT. We are both the only issuer an
+d the only verifier, so
+… +169 lines
+
+Now config, requirements, and the boot check:
+
+● Update(~\OneDrive\Desktop\Edee\backend\app\core\config.py)
+Added 17 lines
+    # boot with it set to 1.
+    DEV_MODE: Optional[bool] = None
+
+    # Signs the session tokens the local email/passwo
+rd path issues (see
+    # app/core/local_token.py). Unrelated to Firebase
+: it exists so the
+    # platform can authenticate people while no servi
+ce account is
+    # configured. Staging and production refuse to bo
+ot without it;
+    # development falls back to a public constant wit
+h a warning.
+    AUTH_SECRET: str = ""
+
+    # Seeded admin account for the local path, so a f
+resh database has one way
+    # in. seeds/users.py refuses to run in production
+ regardless.
+    SEED_ADMIN_EMAIL: str = "admin@local.test"
+    SEED_ADMIN_PASSWORD: str = "Test@1234"
+
+k stays usable. Long
+    # enough to survive a weekend and an admin forwar
+ding it on, short enough
+    # that a link left in an inbox is not a permanent
+ way in.
+
+    # How long a minted session cookie stays valid. F
+irebase allows 5 minutes
+    # to 14 days. Eight hours covers a working day; t
+he frontend's two-hour
+    # idle logout is what ends an unattended session
+sooner, and this is the
+
+● Update(~\OneDrive\Desktop\Edee\backend\requirements.txt)
+Added 5 lines
+email-validator==2.1.0.post1
+slowapi==0.1.9
+
+# Password hashing for the local email/password sign-
+in path. Used directly
+# rather than through passlib: passlib is unmaintaine
+d and its bcrypt backend
+# raises against bcrypt 4.x.
+bcrypt==4.2.0
+
+# razorpay (still, as of 2.0.1) import
+# setuptools 81 deprecated it and 84 removed it, so o
+n Python 3.12 the app
+# cannot even be imported without this pin. Revisit w
+hen razorpay drops the
+
+Added 8 lines
+                "refusing to boot: ENVIRONMENT=%s but
+ no Firebase service "
+                "account is configured" % settings.EN
+VIRONMENT
+            )
+        # The local password path signs its own sessi
+on tokens. Without a
+        # secret it would fall back to the public dev
+elopment constant, which
+        # means anyone who has read the source can mi
+nt an admin session.
+        if not settings.AUTH_SECRET:
+            raise RuntimeError(
+                "refusing to boot: ENVIRONMENT=%s but
+ AUTH_SECRET is not set"
+                % settings.ENVIRONMENT
+            )
+    if is_dev_mode():
+        log_dev_mode_once()
+    await init_db()
+
+Now the migration and ORM models:
+
+● Write(~\OneDrive\Desktop\Edee\backend\migrations…\010_local_auth.py)
+Wrote 135 lines to
+..\backend\migrations\versions\010_local_au
+"""local email/password credentials and staff invites
+
+Revision ID: 010
+Revises: 009
+Create Date: 2026-09-20
+Identity has so far been Firebase's entirely: every tab
+le keys off a
+`firebase_uid`, and `middleware/auth.py` verifies Fireb
+ase tokens. With no
+service account available, nobody can sign in at all.
+… +168 lines
+
+  Ran 1 shell command
+
+● Bash(cd "C:/Users/avikk/OneDrive/Desktop/Edee" && cat >>
+      backend/app/models/database.py <<'PYEOF'…)
+ok
+~\OneDrive\Desktop\Edee\backend\app\models\database.py (+81
+-1)
+            "status IN ('uploaded', 'signed_up')",
+            name="coaching_student_status_check",
+        ),
+    )
+
+class AuthCredential(Base):
+    """
+    An email/password account.
+
+    `uid` is the bridge to everything else: it is wr
+itten into the
+    `firebase_uid` column of whichever identity tabl
+e matches the role
+    (students, college_admins, coaching_center_admin
+s, platform_users), so
+    ownership queries and role guards never need to
+know which sign-in path
+    produced the identity holding them.
+    """
+
+    __tablename__ = "auth_credentials"
+
+    id = Column(UUID(as_uuid=True),
+    uid = Column(Text, unique=True, nullable=False)
+    email = Column(Text, unique=True, nullable=False
+)
+    password_hash = Column(Text, nullable=False)
+    role = Column(Text, nullable=Fal
+ey("colleges.id"))
+    coaching_centre_id = Column(UUID(as_uuid=True),
+ForeignKey("coaching_centers.id"))
+    active = Column(Boolean, nullable=False, default
+=True, server_default=text("true"))
+    # Rides in every token issued to this account. B
+umping it invalidates all
+    # of them at once - the local equivalent of revo
+king refresh tokens.
+    token_version = Column(Integer, nullable=False,
+default=0, server_default=text("0"))
+    created_at = Column(DateTime(timezone=True), def
+ault=_utcnow, server_default=func.now())
+    password_changed_at = Column(
+        DateTime(timezone=True), default=_utcnow, se
+rver_default=func.now()
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "role IN ('student', 'college', 'coachin
+g', 'admin')",
+            name="auth_credential_role_check",
+        ),
+… 45 more lines
+(what this command changed; a convenience view, not a review
+or audit of the command)
+
+Now the middleware — one new branch, existing paths untouched:
+
+● Update(~\OneDrive\Desktop\Edee\backend\app\middleware\auth.py)
+Added 4 lines
+"""
+from fastapi import Depends, HTTPException, Request
+from fastapi.security import HTTPBearer, HTTPAuthoriz
+ationCredentials
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
+from typing import Optional
+from firebase_admin import auth as firebase_auth
+import firebase_admin
+
+from uuid import UUID
+import logging
+
+from app.core import local_token
+from app.core.config import settings
+from app.core.devmode import is_dev_mode, parse_dev_t
+oken
+from app.db.connection import get_db
+
+logger = logging.getLogger(__name__)
+
+
+● Update(~\OneDrive\Desktop\Edee\backend\app\middleware\auth.py)
+Added 55 lines
+SESSION_HEADER = "X-Session-Cookie"
+
+
+async def _verify_local_token(token: str, db: AsyncS
+ession) -> dict:
+    """
+    Verify a session token minted by the local email
+/password path.
+
+    Two steps, and both are needed. The signature pr
+oves we issued it and that
+ves the account still
+    exists, is still active, and has not had its ses
+sions revoked since -
+    which is the same guarantee check_revoked=True b
+uys on the Firebase path,
+    for one indexed SELECT instead of a network roun
+d trip.
+
+    Role and scope come from the row, not from the t
+oken. An admin who moves
+    somebody between colleges, or strips a role, sho
+uld not have to wait out
+    an eight-hour token for it to mean anything.
+    """
+    if claims is None:
+        raise HTTPException(
+            status_code=401,
+            detail="Session expired, sign in again",
+            headers={"WWW-Authentic
+
+    row = (
+        await db.execute(
+            text(
+                """
+ntre_id, active, token_version
+                FROM auth_credentials
+                WHERE uid = :uid
+                """
+            ),
+        )
+    ).fetchone()
+
+    if row is None:
+        raise HTTPException(status_
+    if not row.active:
+        raise HTTPException(status_code=403, detail=
+"This account is disabled")
+    if int(claims.get("tv", -1)) != int(row.token_ve
+rsion):
+"Session revoked, sign in again")
+
+    return {
+        "uid": claims["uid"],
+        "role": row.role,
+lege_id else None,
+        "coaching_centre_id": (
+            str(row.coaching_centre_id) if row.coach
+ing_centre_id else None
+        ),
+ion from a Firebase one
+        # without re-parsing the credential.
+        "local": True,
+    }
+
+def _verify_session_cookie(cookie: str) -> dict:
+    """Verify a session cookie minted by POST /auth/
+session."""
+    if is_dev_mode():
+
+Added 21 lines, removed 9 lines
+async def get_current_user(
+    request: Request,
+    credentials: Optional[HTTPAuthorizationCredentia
+ls] = Depends(bearer),
+) -> dict:
+    """
+    Answers "who is this" from either credential the
+ platform issues.
+    Answers "who is this" from any
+
+    Two ways in, verified by two different Firebase
+calls that cannot be
+    confused for one another:
+    Two ways a credential arrives:
+      Authorization: Bearer <id token>   the browser
+, calling directly
+      X-Session-Cookie: <session cookie> the Next.js
+ server, rendering a page
+      Authorization: Bearer <creden
+      X-Session-Cookie: <credential>      the Next.j
+s server, rendering a page
+
+    check_revoked=True is not optional on either. Wi
+thout it, revoking a
+g until the credential
+    expires by itself, leaving an attacker up to an
+hour of continued access.
+    It costs one lookup.
+    and three kinds of credential i
+    email/password path, a dev: token, or a Firebase
+ ID token or session
+    cookie. The local one is tried first because it
+is the cheapest to reject
+    - a prefix check, then an HMAC - and because it
+is the path that works
+    while no Firebase service account is configured.
+
+    Whichever path answers, the returned claims have
+ the same shape, so every
+    guard downstream stays indifferent to how somebo
+dy signed in.
+
+    check_revoked=True is not optional on the Fireba
+se branches. Without it,
+    revoking a compromised account's refresh tokens
+does nothing until the
+    credential expires by itself, leaving an attacke
+r up to an hour of
+    continued access. It costs one lookup. The local
+ branch buys the same
+    guarantee with token_version.
+    """
+    session_cookie = request.headers.get(SESSION_HEA
+DER)
+    if session_cookie:
+        if local_token.is_local_tok
+):
+            return await _verify_local_token(session
+_cookie, db)
+        return _verify_session_cookie(session_cookie
+)
+
+
+    token = credentials.credentials
+
+    # The local email/password path. Available in ev
+ery environment: it is a
+he only one that works
+    # while no Firebase service account is configure
+d.
+    if local_token.is_local_token(token):
+        return await _verify_local_token(token, db)
+
+    # Dev mode (local development without Firebase o
+nly): accept
+    # self-described dev: tokens. A
+    # can reach the real verifier.
+
+  Ran 2 shell commands
+
+The invite-code redemption in students.py:95
+than duplicating:
+
+● Write(~\OneDrive\Desktop\Edee\backend\app\services\signup.py)
+Wrote 162 lines to ..\backend\app\services\signup.py
+"""
+
+e with Firebase and
+complete a profile (POST /students/), or sign up with a
+(POST /auth/signup). What happens *after* the identity
+is settled is identical
+the same welcome mail - so it lives here rather than be
+drifting apart.
+… +192 lines
+
+Now rewire students.py onto the shared helpe
+● Bash(cd "C:/Users/avikk/OneDrive/Desktop/Edee" && python - <<'PYEOF'
+      import io, re…)
+done
+1 file changed (binary, mode only or too large to show)
+
+
+● Write(~\OneDrive\Desktop\Edee\backend\app\models\auth.py)
+Wrote 134 lines to ..\backend\app\models\auth.py
+"""
+rd path.
+The password rules live here rather than in the router
+accepts one - signup, invite acceptance, password chan
+ge - enforces the same
+2 at the edge instead of
+an exception from inside bcrypt.
+from datetime import datetime
+… +148 lines
+
+  Ran 2 shell commands
+
+Removed 4 lines
+    # Not length-validated. A wrong password is a wro
+ng password; telling
+    # somebody their guess was too short is a hint ab
+out the real one.
+    # Which door they knocked on. Verified against th
+e account's real role so
+    # the UI can offer the right portal instead of la
+nding them somewhere they
+    # did not choose.
+oaching", "admin"]] = None
+
+
+class TokenOut(BaseModel):
+
+Added 11 lines
+    token = credentials.credentials
+    expires_in = settings.SESSION_MAX_AGE_SECONDS
+
+    # A local session token already
+    # carries its own expiry, so there is nothing to
+ exchange it for. Verified
+    # rather than waved through, so a forged one fai
+ls here instead of
+    # becoming a cookie that fails
+    if local_token.is_local_token(token):
+        claims = local_token.verify(token)
+        if claims is None:
+            raise HTTPException(status_code=401, det
+ail="Sign in again")
+me())
+        return SessionOut(session=token, expires_in=
+max(remaining, 0))
+
+    # Dev mode has no Admin SDK to
+    # session. It is still parsed, so a malformed on
+e fails here rather than
+    # becoming an unverifiable cookie.
+
+● Update(~\OneDrive\Desktop\Edee\backend\app\r
+
+
+@router.delete("/session", status_code=204)
+async def revoke_session(user: dict = Depends(get_cu
+rrent_user)):
+    user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Revoke every session this accou
+
+    This ends it everywhere, which is what a user si
+gning out of a shared
+    machine actually wants. Dev mode has nothing to
+revoke.
+    # A local session is revoked by moving the accou
+nt's token_version past
+    # the one every outstanding token carries. Same
+effect as revoking refresh
+    # tokens, and it takes hold on
+    if user.get("local"):
+        await db.execute(
+            text(
+                "UPDATE auth_credentials "
+                "SET token_version
+ 1 WHERE uid = :uid"
+            ),
+            {"uid": user["uid"]},
+        )
+        await db.commit()
+        return
+
+    if is_dev_mode():
+from fastapi.security import HTTPAuthorizationCredent
+ials, HTTPBearer
+from firebase_admin import auth as firebase_auth
+from pydantic import BaseModel
+from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core import local_token
+from app.core.config import settings
+from app.core.devmode import is_dev_mode, parse_dev_t
+oken
+from app.middleware.auth import _firebase_app, get_cu
+rrent_user
+from app.core.rate_limit import limited
+from app.db.connection import get_db
+from app.middleware.auth import _firebase_app, get_cu
+rrent_user, require_roles
+from app.models.auth import (
+    InviteAcceptIn,
+    InviteCreateIn,
+    InviteDetail,
+    InviteOut,
+    LoginIn,
+    SignupIn,
+    TokenOut,
+)
+from app.services.email import portal_url, send_email
+from app.services.passwords import h
+from app.services.signup import (
+    ensure_unused,
+    insert_student,
+    redeem_invite_code,
+    send_welcome,
+
+logger = logging.getLogger(__name__)
+
+
+● Update(~\OneDrive\Desktop\Edee\backend\app\m
+    current_password: str = Field(max_length=1024)
+
+
+class InviteAcceptIn(PasswordField):
+    """Accepting an invite is just
+
+
+class InviteCreateIn(BaseModel):
+    email: EmailStr
+    name: str = Field(min_length=2,
+  Made 1 scratchpad edit +505, ran 1 shell command
+
+❯ continue
+
+● Bash(cd "C:/Users/avikk/OneDrive/Desktop/Ede
+      e-Desktop-Edee/2914d428-405a-4ca8-8977-df22cfd4…)
+auth.py parses
+1 file changed (binary, mode only or too large to show)
+
+● Update(~\OneDrive\Desktop\Edee\backend\app\r
+an attacker a full hour on a stolen session. A sessio
+n cookie is revocable -
+verify_session_cookie(check_revoked=True) rejects it
+the moment the account's
+refresh tokens are revoked.
+The second half of this module is the local email/pas
+sword path: signup, login,
+password change and the staff invite links. It exists
+ because identity here was
+Firebase's entirely, so with no serv
+at all. It runs beside the Firebase endpoints above r
+ather than replacing them,
+and both can be live at once.
+"""
+import hashlib
+
+  Ran 5 shell commands
+
+All endpoints registered. Now the seed and the tests:
+
+
+● Bash(cd "C:/Users/avikk/OneDrive/Desktop/Edee/backend" && printf
+      '%s\n' 'os.environ.setdefault("AUTH_SECRET",
+      "test-auth-secret-not-used-anywhere-real")' >> conftest…)
+os.environ.setdefault("CORS_ORIGINS", "ht
+os.environ.setdefault("ENVIRONMENT", "test")
+… +2 lines
+Updated ~\OneDrive\Desktop\Edee\backend\conftest.py (+1 -0)
+os.environ.setdefault("RAZORPAY_WEBHOOK_SECRET", "web
+hook_secret")
+st:3000")
+os.environ.setdefault("ENVIRONMENT", "test")
+os.environ.setdefault("AUTH_SECRET", "test-auth-secre
+t-not-used-anywhere-real")
+
+Wrote 107 lines to ..\backend\seeds\local_admin.py
+"""
+in with a password.
+
+
+coaching accounts are issued by an admin as invite lin
+ks from inside the
+s with known passwords
+that nobody asked for. One way in is enough; everythin
+through the product.
+
+  Ran 3 shell commands
+
+● Write(~\OneDrive\Desktop\Edee\backend\tests\test_local_auth.py)
+Wrote 639 lines to ..\backend\tests\test_
+
+Most of the suite signs in by overriding get_current_u
+ser, which is right for
+less for testing how an
+identity is established. These tests
+en that would not work
+in production does not work here either.
+import time
+… +770 lines
+
+
+Unit tests pass; the DB-backed ones skipped. Starting Postgres:
+
+  Ran 1 shell command
+
+build the frontend:
+
+  Ran 3 shell commands
+
+Now the frontend. Starting with the client-s
+● Write(lib\localSession.ts)
+Wrote 119 lines to lib\localSession.ts
+import { ROLE_COOKIE, isRole, type Role } from './port
+
+/**
+ * Mirrors lib/devSession.ts, and for the same reason:
+ there is no Firebase SDK
+ewhere the app can read
+ * it on the next render. It is kept in localStorage a
+ * so a sign-in in one part of the page refreshes the
+ *
+… +144 lines
+
+
+import { getDevToken } from './devSession';
+import { tryGetFirebaseAuth } from './firebase';
+import { logger } from './logger';
+
+/**
+ * Keeps the httpOnly session cookie in step with who
+ever is signed in.
+ *
+ * The cookie is what lets a server component render
+a page with the user's
+ * data already in it. It can only be created from a
+credential that exists in
+ * the browser, so this runs at exactly two moments:
+just after a sign-in, and
+ * just before a sign-out.
+ *
+ * Every failure here is swallowed on purpose. The se
+ssion cookie is an
+ * optimisation - without it pages still fetch on the
+ client exactly as they
+ * did before - so a hiccup creating one must never b
+lock a sign-in.
+
+const SESSION_ENDPOINT = '/auth/session';
+
+/** Exchange the current credential for a session coo
+kie. */
+oid> {
+  try {
+    const user = tryGetFirebaseAuth()?.currentUser;
+    // Dev sessions have no Firebase user; the dev to
+ken is its own credential
+    // and the backend parses it the same way on both
+ paths.
+    const idToken = user ? await user.getIdToken() :
+getDevToken();
+    if (!idToken) return;
+
+    await fetch(SESSION_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+,
+      body: JSON.stringify({ idToken }),
+    });
+  } catch (error) {
+    logger.warn('Could not start a server session; pa
+ges will fetch client-side', error);
+  }
+}
+
+… 60 more lines
+
+● Bash(cd "C:/Users/avikk/OneDrive/Desktop/Edee/frontend" && python -
+      <<'PYEOF'
+      import io…)
+useRole done
+7:import { getLocalClaims, onLocalSessionChanged } from '@/l
+ib/localSession';
+… +8 lines
+Updated hooks\useRole.ts (+115 -91)
+'use client';
+
+import { useEffect, useState } from 'react';
+import { onIdTokenChanged } from 'firebase/auth';
+import { tryGetFirebaseAuth } from '@/lib/firebase';
+import { getDevToken, onDevSessionChanged, parseDevT
+oken } from '@/lib/devSession';
+import { isRole, type Role } from '@/lib/portals';
+
+interface RoleState {
+  role: Role | null;
+  collegeId: string | null;
+  coachingCentreId: string | null;
+  loading: boolean;
+}
+
+const EMPTY: Omit<RoleState, 'loading'> = {
+  role: null,
+  collegeId: null,
+  coachingCentreId: null,
+};
+
+/** Identity from a stored dev token, if any. No Fir
+ebase involved. */
+function devState(): Omit<RoleState, 'loading'> {
+  const token = getDevToken();
+  const claims = token ? parseDevToken(token) : null
+;
+  if (!claims) return { ...EMPTY };
+  return {
+    role: claims.role,
+    collegeId: claims.collegeId,
+  };
+}
+
+/**
+ * Reads the role from the decoded
+ *
+ * onIdTokenChanged rather than onAuthStateChanged:
+it also fires on token
+ * refresh, so a role granted in the admin portal re
+aches an open tab without
+ * a reload.
+ */
+… 166 more lines
+
+  Ran 3 shell commands
+
+object, which a local session doesn't have. Adding email to the
+token so those keep working:
+
+● Bash(cd "C:/Users/avikk/OneDrive/Desktop/Edee/backend" && python -
+      <<'PYEOF'
+done
+254:        email=row.email,
+272:                SELECT uid, email, role, college_id, coa
+… +5 lines
+Updated
+(+154 -143)
+"""
+Session tokens for the local password path.
+
+Firebase mints session cookies. Wit
+password path still needs a credential the browser c
+an hold and this API can
+verify on the next request. This mints one:
+
+    edee1.<base64url payload>.<base
+
+Deliberately not a JWT. We are both the only issuer
+and the only verifier, so
+the format has to be unambiguous and nothing more. P
+yJWT would add a
+ the field behind the
+algorithm-confusion bugs that keep recurring in JWT
+libraries. There is no
+algorithm to confuse here: HMAC-SHA256 or the token
+is rejected.
+The payload is signed, not encrypted. It is readable
+ by anyone holding the
+token, which is fine: it carries the same claims the
+ holder's own session
+already grants them. What it cannot
+signature is for.
+"""
+import base64
+import hmac
+import json
+import time
+from hashlib import sha256
+from typing import Any, Optional
+
+from app.core.config import setting
+logger = logging.getLogger(__name__)
+
+PREFIX = "edee1"
+
+# A development fallback so local sessions survive a
+ server restart without
+# anyone having to invent a secret first. Staging an
+d production refuse to
+# boot without a real AUTH_SECRET (see app.main), so
+ this value can never be
+# the one signing a deployed session.
+_DEV_SECRET = "edee-development-only-this-is-not-a-s
+ecret"
+
+… 257 more lines
+… 1 more file changed
+
+● Bash(cd "C:/Users/avikk/OneDrive/Desktop/Edee/frontend" && python -
+      <<'PYEOF'
+      import io…)
+ok
+4: * Client-side half of the email/password sign-in path.
+24:  email: string | null;
+… +2 lines
+Updated lib\localSession.ts (+121 -119)
+import { ROLE_COOKIE, isRole, type Role } from './po
+rtals';
+
+/**
+ * Client-side half of the email/password sign-in pa
+th.
+ *
+ * Mirrors lib/devSession.ts, and for the same reaso
+n: there is no Firebase SDK
+ * holding this identity, so the token has to live s
+omewhere the app can read
+ * it on the next render. It is kept in localStorage
+ and announced on an event,
+ * so a sign-in in one part of the
+e rest without a reload.
+ *
+ * The claims here are DECODED, never verified. Anyo
+ne can edit what is in
+ * their own localStorage; what stops that mattering
+ is that the backend checks
+ * the signature on every request. Treat everything
+this module returns as a
+ * hint about what to render, never as permission to
+ render it.
+ */
+
+const TOKEN_KEY = 'edee_local_token';
+const EVENT = 'edee-local-session';
+const PREFIX = 'edee1';
+
+export interface LocalClaims {
+  uid: string;
+  role: Role;
+  collegeId: string | null;
+  coachingCentreId: string | null;
+  /** Seconds since the epoch, as the backend wrote
+it. */
+}
+
+/** Decode the payload of an `edee1.` token. Mirrors
+ app/core/local_token.py. */
+export function parseLocalToken(tok
+  const parts = token.split('.');
+  if (parts.length !== 3 || parts[0] !== PREFIX) ret
+urn null;
+
+  try {
+    // The backend strips base64url padding; atob in
+sists on it.
+    const padded = parts[1].replace(/-/g, '+').repla
+ce(/_/g, '/');
+    const claims = JSON.parse(atob(padded + '='.repe
+at((4 - (padded.length % 4)) % 4)))
+    if (!isRole(claims.role) || typeof claims.uid !=
+= 'string') return null;
+… 200 more lines
+
+Now useAuth — it needs to report a local ses
+● Write(hooks\useAuth.ts)
+Added 39 lines, removed 6 lines
+import { onAuthStateChanged, signOut as fbSignOut, ty
+pe User } from 'firebase/auth';
+import { tryGetFirebaseAuth } from '
+Session';
+import {
+  clearLocalToken,
+  getLocalClaims,
+  onLocalSessionChanged,
+} from '@/lib/localSession';
+import { clearSessionCookie } from '@/lib/session';
+import { endServerSession } from '@/lib/clientSession
+';
+
+/**
+ * Who is signed in, by whichever of the three paths
+they used.
+ *
+ * `user` is the Firebase User and stays null for an
+email/password or dev
+nything that only needs
+ * "is somebody here" or "what do I put in the accoun
+t menu" should read
+ * `signedIn` and `email` instead, which are true for
+ all three.
+export function useAuth() {
+  const [user, setUser] = useState<User | null>(null)
+;
+  const [local, setLocal] = useState<LocalClaims | nu
+ll>(null);
+
+  useEffect(() => {
+    const syncLocal = () => setLocal(getLocalClaims()
+);
+    syncLocal();
+);
+
+    const auth = tryGetFirebaseAuth();
+    if (!auth) {
+      // Firebase is not configured.
+      // on a loading state forever.
+      // Firebase is not configured - the common case
+ until the key arrives.
+      // An email/password session is still a session
+, so resolve rather than
+      // hanging on a loading state forever.
+      setLoading(false);
+      return;
+      return stopLocal;
+    }
+    return onAuthStateChanged(auth, (next) => {
+    const stopAuth = onAuthStateChanged(auth, (next)
+=> {
+      setUser(next);
+      setLoading(false);
+    });
+    return () => {
+      stopLocal();
+      stopAuth();
+    };
+  }, []);
+
+  async function signOut() {
+    // Before dropping the local credential, while it
+ can still authenticate
+    // the revoke call upstream.
+    // the revoke call upstream. For
+d session that call is
+    // what bumps token_version, so every other devic
+e is signed out too.
+    await endServerSession();
+    const auth = tryGetFirebaseAuth();
+    if (auth) await fbSignOut(auth);
+
+        /* the rows are also swept at server shutdown
+ */
+      }
+    }
+    clearLocalToken();
+    clearDevToken();
+    clearSessionCookie();
+    // Whatever this account read stays in memory unt
+il it is dropped, and the
+
+    clearApiCache();
+  }
+
+  return { user, loading, signOut };
+  return {
+    user,
+    local,
+    signedIn: Boolean(user) || local !== null,
+    email: user?.email ?? local?.email ?? null,
+    loading,
+    signOut,
+  };
+}
+
+● Bash(cd "C:/Users/avikk/OneDrive/Desktop/Edee/frontend" && python -
+      <<'PYEOF'
+      import io…)
+done
+components/shells/PortalShell.tsx:30:  co
+… +14 lines
+Updated app\admin\profile\page.tsx (+78 -78)
+'use client';
+
+import { CheckCircle, Info } from '@
+import PageHeader from '@/components/shells/PageHeade
+r';
+import { PORTAL_NAV } from '@/components/shells/nav';
+import Badge from '@/components/ui/Badge';
+import { DetailItem, DetailList, Panel } from '@/comp
+onents/ui/DetailList';
+import { useAuth } from '@/hooks/useAuth';
+import { useRole } from '@/hooks/use
+/**
+ * The admin's own account page. Deliberately basic a
+nd read-only.
+ *
+ * There is no admin hierarchy in th
+ * carries a flat set of four roles, with no tier cla
+im and no column behind
+ * it, so every admin can reach every section below.
+Rather than invent levels
+ * that nothing enforces, this page
+ * leaves the shape for the team to fill in. When tie
+rs do land, this is the
+ * page that renders them and PORTAL_NAV.admin is the
+ list to filter.
+ */
+  const { user } = useAuth();
+  const { role } = useRole();
+  const sections = PORTAL_NAV.admin;
+
+  return (
+      <PageHeader
+        title="Your account"
+        description="Who you are signed in as, and wh
+at that lets you open in this portal."
+      />
+      <div className="flex flex-col gap-6">
+        <Panel title="Identity">
+          <DetailList>
+            <DetailItem label="Email">
+              {user?.email ?? <span
+            </DetailItem>
+            <DetailItem label="Account ID" mono>
+              {user?.uid ?? <span className="text-[va
+r(--text-muted)]">Not available</span>}
+… 116 more lines
+'use client';
+
+import Link from 'next/link';
+import Image from 'next/image';
+import { usePathname, useRouter } f
+import { useEffect, useState } from 'react';
+import { List, SignOut, X } from '@phosphor-icons/re
+act';
+import { useAuth } from '@/hooks/useAuth';
+import { PORTAL_LABEL, type Role }
+import { PORTAL_NAV } from './nav';
+import NotificationBell from './NotificationBell';
+import UserMenu from './UserMenu';
+
+/**
+es in the header.
+ *
+ * Brand + portal label, horizontal nav links, user
+avatar, and a red
+ * sign-out button. Mobile gets a h
+ * content, never from a different palette.
+ */
+export default function PortalShell({
+  role,
+  children,
+  role: Role;
+  children: React.ReactNode;
+}) {
+  const pathname = usePathname();
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+
+  const items = PORTAL_NAV[role];
+
+  // A route change means the menu
+
+  async function handleSignOut() {
+    await signOut();
+    router.replace('/');
+… 272 more lines
+'use client';
+
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { useEffect, useRef, useStat
+import { useAuth } from '@/hooks/useAuth';
+import { useRole } from '@/hooks/useRole';
+import { PORTAL_LABEL, type Role } from '@/lib/porta
+ls';
+
+/** Where each role's own details live. Admin's page
+ is deliberately basic. */
+export const PROFILE_PATH: Record<Role, string> = {
+  student: '/student/profile',
+  college: '/college/profile',
+  coaching: '/coaching/profile',
+  admin: '/admin/profile',
+};
+
+/**
+ * The signed-in user's account button, shared by ev
+ery page.
+ *
+ * Renders nothing at all when nobody is signed in —
+ a logged-out visitor
+ * should never see an account control. Sign-out del
+iberately lives outside
+ * this menu: the portal shell already carries its o
+wn sign-out button.
+ */
+export default function UserMenu() {
+  const { role, loading } = useRole();
+  const { user } = useAuth();
+  const pathname = usePathname();
+  const [open, setOpen] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  // A route change means the menu has done its job.
+  useEffect(() => setOpen(false), [pathname]);
+
+  useEffect(() => {
+    if (!open) return;
+    function onPointerDown(event: PointerEvent) {
+      if (panelRef.current && !panelRef.current.cont
+ains(event.target as Node)) {
+'use client';
+
+import { useState } from 'react';
+import Button from '@/components/ui/Button';
+import Field from '@/components/ui/Fie
+import api, { apiErrorMessage } from '@/lib/api';
+import { setLocalToken } from '@/lib/localSession';
+import type { Role } from '@/lib/portals';
+… +94 lines
+
+
+● Bash(cd "C:/Users/avikk/OneDrive/Desktop/Edee/frontend" && python -
+      <<'PYEOF'
+      import io…)
+LoginClient updated
+;
+… +7 lines
+1 file changed (binary, mode only or too large to show)
+
+● Bash(cd "C:/Users/avikk/OneDrive/Desktop/Ede
+      import io…)
+ok
+no stray Divider
+Updated app\(public)\login\LoginClient.tsx (+11 -4)
+];
+const PORTAL_HELP: Record<Role, string> = {
+  student: 'Sign in with Google or your mobile number
+ to reach your applications.',
+  college: 'Use the account your college provided. Ne
+w college accounts are created by th
+  student:
+    'Sign in with your email and password, or with Go
+ogle or your mobile number.',
+  college:
+    'Use the email and password your
+the platform team.',
+  coaching:
+    'Use the account your coaching centre provided. N
+ew centre accounts are created by the platform team.'
+,
+as set up with. New centre accounts are created by th
+e platform team.',
+  admin: 'Platform staff only. Your account already c
+arries the admin role.',
+};
+
+              reports dev mode rather than rendering
+ forms that can only fail. */}
+          {portal === 'student' && !devBypass && (
+            <>
+              <div className="flex items-center gap-
+3 text-xs text-[var(--text-muted)]">
+                <span className="h-px flex-1 bg-[var
+(--line)]" />
+                or
+(--line)]" />
+              </div>
+
+              <PhoneOTPForm onSuccess={route} onErro
+r={setError} />
+              <div className="flex items-center gap-
+3 text-xs text-[var(--text-muted)]">
+
+Now the dual-mode signup page:
+
+Added 188 lines, removed 105 lines
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import Image from 'next/image';
+import Link from 'next/link';
+import Field from '@/components/ui/Field';
+import { Input, Select } from '@/components/ui/Input';
+
+import { useAuth } from '@/hooks/useAuth';
+import { useRole } from '@/hooks/use
+import { setLocalToken } from '@/lib/localSession';
+import api, { apiErrorMessage } from '@/lib/api';
+import { isValidIndianMobile } from '@/lib/format';
+import { PORTAL_HOME } from '@/lib/portals';
+
+
+/**
+ * Lives at /signup rather than /student/signup on pu
+rpose.
+ * Student signup. The only signup o
+ * accounts are created by an admin and arrive as a s
+et-password link, and the
+ * admin account is seeded.
+ *
+ * At this point the user has a Fire
+ * under /student would be turned away twice over: by
+ the edge middleware, which
+ * sees no role cookie, and by RoleGate, which sees n
+o claim. The backend grants
+ * the student role when this profil
+ * The page has two modes, because there are two ways
+ to become a student:
+ *
+ *   No Firebase user  -> a real signup. Name, email,
+ phone and a password,
+ch creates the credential
+ *                        and the student row togethe
+r.
+ *   A Firebase user   -> profile completion, as befo
+re. They already proved
+ an OTP, so there is no
+ *                        password to set; /students/
+ grants the student role.
+ *
+ * Lives at /signup rather than /stu
+ * nobody has a role claim, so anything under /studen
+t would be turned away
+ * twice over - by the edge guard, which sees no role
+ cookie, and by RoleGate,
+ * which sees no claim.
+export default function SignupClient() {
+  const router = useRouter();
+
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState
+  const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [stream, setStream] = useState<Stream | ''>('
+');
+  const [inviteCode, setInviteCode]
+ string>>({});
+  const [formError, setFormError] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  // Prefill whatever the sign-in me
+  // Firebase already verified who they are, so this
+is the shorter form: no
+  // password, and the identity fields are prefilled
+from the sign-in.
+  const completingProfile = Boolean(
+  useEffect(() => {
+    if (!user) return;
+    setName((value) => value || user.displayName || '
+');
+
+    setPhone((value) => value || (user.phoneNumber ??
+ '').replace(/\D/g, '').slice(-10));
+  }, [user]);
+
+  useEffect(() => {
+    if (!authLoading && !user) router.replace('/login
+');
+  }, [authLoading, user, router]);
+
+  // A role claim means this profile already exists -
+ the backend grants the
+  // claim as it creates it. Signing up again is not
+a thing, so send them to
+  // their portal rather than showing the form a seco
+nd time. Dev mode is
+
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) ne
+xt.email = 'Enter a valid email address.';
+    if (!isValidIndianMobile(phone)) next.phone = 'En
+ter a 10-digit Indian mobile number.';
+    if (!stream) next.stream = 'Choose the level you
+are applying for.';
+
+    if (!completingProfile) {
+      // Matches the backend rule in app/models/auth.
+py, so a password the API
+      // would refuse never gets as
+      if (password.length < 8) next.password = 'Use a
+t least 8 characters.';
+      else if (new TextEncoder().encode(password).len
+gth > 72) {
+        next.password = 'That password is too long.';
+      } else if (password !== confirm) next.confirm =
+ 'Both passwords must match.';
+    }
+
+    setErrors(next);
+    return Object.keys(next).length === 0;
+  }
+
+    setFormError('');
+    if (!validate()) return;
+
+    const profile = {
+      name: name.trim(),
+      email: email.trim().toLowerCase(),
+      phone: phone.replace(/\D/g, '').slice(-10),
+      stream,
+      invite_code: inviteCode.trim() || null,
+    };
+
+    setBusy(true);
+    try {
+      await api.post('/students/', {
+        name: name.trim(),
+        email: email.trim().toLowerCase(),
+        phone: phone.replace(/\D/g, '').slice(-10),
+        stream,
+        invite_code: inviteCode.trim() || null,
+      });
+ Refresh so middleware and
+      // RoleGate can both see it, then go to the po
+rtal. The welcome flag
+      // makes the dashboard confirm the new profile
+ instead of landing flat.
+      // The backend granted the student claim a mom
+ent ago, so the session
+      // minted here carries it.
+      if (completingProfile) {
+        await api.post('/students/
+m. Refresh so middleware
+        // and RoleGate can both see it, then go to
+the portal.
+        await syncSessionCookie(user);
+      } else {
+p', { ...profile, password });
+        // Storing the token is what signs them in:
+it writes the role cookie
+        // the edge guard reads and makes every late
+r request authenticated.
+          setFormError('Your account was created, bu
+t sign-in failed. Try signing in.');
+          return;
+        }
+      }
+rver can render with. The
+      // welcome flag makes the dashboard confirm th
+e new profile instead of
+      // landing flat.
+      await startServerSession();
+;
+    } catch (err) {
+
+    }
+  }
+  if (roleLoading || bouncing) {
+  if (authLoading || roleLoading || bouncing) {
+    return (
+      <main id="main" className="flex min-h-[100dvh]
+ items-center justify-center px-6"
+        <span className="sr-only">Taking you to your
+ portal</span>
+
+        className="absolute inset-0 bg-gradient-to-b
+ from-black/70 via-black/55 to-bla
+      <div className="rise relative w-full max-w-xl
+rounded-xl border border-white/20 bg-[var(--surface-
+raised)] p-6 shadow-[var(--shadow-md)] sm:p-10">
+        <h1 className="font-serif text-3xl font-semi
+bold tracking-tight md:text-4xl">C
+      <p className="mt-2 text-sm leading-relaxed tex
+t-[var(--text-secondary)]">
+        Colleges see this information on every appli
+cation you send.
+      </p>
+bold tracking-tight md:text-4xl">
+          {completingProfile ? 'Complete your profil
+e' : 'Create your account'}
+        </h1>
+        <p className="mt-2 text-sm
+          Colleges see this information on every app
+lication you send.
+        </p>
+
+      <form onSubmit={submit} clas
+        <Field label="Full name" error={errors.name}
+ required>
+          {(fieldProps) => (
+            <Input
+              {...fieldProps}
+              onChange={(event) => setName(event.tar
+get.value)}
+              autoComplete="name"
+              placeholder="Ananya Deshmukh"
+            />
+        </Field>
+        <form onSubmit={submit} className="mt-8 flex
+ flex-col gap-5" noValidate>
+          <Field label="Full name" error={errors.nam
+e} required>
+              <Input
+                {...fieldProps}
+                value={name}
+                onChange={(event) => setName(event.t
+arget.value)}
+                placeholder="Ananya Deshmukh"
+              />
+            )}
+          </Field>
+
+mail} required>
+          {(fieldProps) => (
+            <Input
+              {...fieldProps}
+              type="email"
+              onChange={(event) => setEmail(event.ta
+rget.value)}
+              autoComplete="email"
+              placeholder="you@example.com"
+            />
+        </Field>
+
+        <Field label="Mobile number" error={errors.p
+hone} required>
+          {(fieldProps) => (
+">
+              <span className="inline-flex h-10 shri
+nk-0 items-center rounded-lg border border-[var(--li
+ne-strong)] bg-[var(--surface-sunken)] px-3 text-sm
+text-[var(--text-secondary)]">
+              </span>
+          <Field label="Email address" error={errors
+.email} required>
+            {(fieldProps) => (
+              <Input
+                type="tel"
+                inputMode="numeric"
+                maxLength={10}
+                value={phone}
+                onChange={(event)
+                autoComplete="tel-national"
+                placeholder="98765 43210"
+                type="email"
+                value={email}
+                onChange={(event)
+                autoComplete="email"
+                placeholder="you@example.com"
+              />
+            </div>
+          )}
+            )}
+          </Field>
+
+        <Field
+          label="Applying for"
+u can change it later."
+          error={errors.stream}
+          required
+        >
+          {(fieldProps) => (
+              {...fieldProps}
+              value={stream}
+              onChange={(event) => setStream(event.t
+arget.value as Stream)}
+            >
+n>
+              <option value="UG">Undergraduate</opti
+on>
+              <option value="PG">Postgraduate</optio
+n>
+          )}
+        </Field>
+          <Field label="Mobile number" error={errors
+.phone} required>
+            {(fieldProps) => (
+-2">
+                <span className="inline-flex h-10 sh
+rink-0 items-center rounded-lg border border-[var(--
+line-strong)] bg-[var(--surface-sunken)] px-3 text-s
+m text-[var(--text-secondary)]">
+                  +91
+                </span>
+                <Input
+                  {...fieldProps}
+                  type="tel"
+                  inputMode="numeric"
+                  maxLength={10}
+                  value={phone}
+                  onChange={(event) => setPhone(even
+t.target.value.replace(/\D/g, ''))}
+                  autoComplete="tel-national"
+                  placeholder="98765 43210"
+                />
+              </div>
+            )}
+          </Field>
+
+        <Field
+          label="Coaching invite code"
+          hint="Optional. Links you to a coaching ce
+ntre that invited you."
+        >
+          {(fieldProps) => (
+            <Input
+              {...fieldProps}
+              value={inviteCode}
+              onChange={(event) => setInviteCode(eve
+nt.target.value.toUpperCase())}
+              autoComplete="off"
+              placeholder="e.g. X9K2M7QPRT"
+            />
+          {!completingProfile && (
+            <>
+              <Field
+                label="Password"
+                hint="At least 8 characters."
+                error={errors.password}
+                required
+              >
+                {(fieldProps) => (
+                  <Input
+                    {...fieldProps}
+                    type="password"
+                    value={password}
+                    onChange={(event) => setPassword
+(event.target.value)}
+                    autoComplete="new-password"
+                    placeholder="••••••••"
+                  />
+                )}
+              </Field>
+
+              <Field label="Confirm password" error=
+{errors.confirm} required>
+                {(fieldProps) => (
+                  <Input
+                    {...fieldProps
+                    value={confirm}
+                    onChange={(event) => setConfirm(
+event.target.value)}
+                    autoComplete="new-password"
+                    placeholder="•
+                )}
+              </Field>
+            </>
+          )}
+        </Field>
+
+        {formError && <ErrorState message={formError
+} />}
+            label="Applying for"
+            hint="This filters the courses you see.
+You can change it later."
+            error={errors.stream}
+            required
+            {(fieldProps) => (
+              <Select
+                {...fieldProps}
+                value={stream}
+                onChange={(event)
+              >
+                <option value="">Choose a level</opt
+ion>
+                <option value="UG">Undergraduate</op
+tion>
+ion>
+              </Select>
+            )}
+          </Field>
+
+          Create profile
+        </Button>
+      </form>
+          <Field
+            label="Coaching invite
+centre that invited you."
+          >
+            {(fieldProps) => (
+              <Input
+                {...fieldProps}
+                onChange={(event) => setInviteCode(e
+vent.target.value.toUpperCase())}
+                autoComplete="off"
+                placeholder="e.g. X9K2M7QPRT"
+              />
+          </Field>
+
+          {formError && <ErrorState message={formErr
+or} />}
+
+            {completingProfile ? 'Create profile' :
+'Create account'}
+          </Button>
+        </form>
+
+          <p className="mt-6 text-[13px] leading-rel
+axed text-[var(--text-secondary)]">
+            Already have an account?{' '}
+            <Link href="/login?portal=student" class
+Name="font-medium underline">
+            </Link>
+            .
+          </p>
+        )}
+      </div>
+  );
+
+Now the invite set-password page:
+
+  Ran 1 shell command
+● Bash(cd "C:/Users/avikk/OneDrive/Desktop/Edee/frontend" && mkdir -p
+      "app/(public)/set-password" && python - <<'PYEOF'
+      import io…)
+ok
+Updated app\(public)\signup\page.tsx (+1
+import FloatingUserMenu from '@/components/shells/Flo
+atingUserMenu';
+import SignupClient from './SignupClient';
+
+export const metadata: Metadata = {
+
+export const dynamic = 'force-dynamic';
+
+export default function SignupPage() {
+  return (
+      <FloatingUserMenu />
+      <SignupClient />
+    </>
+  );
+}
+import FloatingUserMenu from '@/components/shells/Flo
+atingUserMenu';
+import SignupClient from './SignupClient';
+
+export const metadata: Metadata = {
+
+export const dynamic = 'force-dynamic';
+
+export default function SignupPage() {
+  return (
+      <FloatingUserMenu />
+      <SignupClient />
+    </>
+  );
+}
+● Write(app\(public)\set-password\SetPasswordClient.tsx)
+Wrote 224 lines to
+app\(public)\set-password\SetPasswordClient.tsx
+'use client';
+
+ation';
+import Image from 'next/image';
+import Link from 'next/link';
+import Button from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
+import { ErrorState, Skeleton } from '@/components/ui/
+States';
+… +257 lines
+  student: '/student',
+  college: '/college',
+  coaching: '/coaching',
+  admin: '/admin',
+};
+
+/** Where a freshly authenticated user lands. */
+export const PORTAL_HOME: Record<Ro
+  college: '/college/dashboard',
+  coaching: '/coaching/dashboard',
+  admin: '/admin/dashboard',
+};
+
+  student: 'Student',
+  college: 'College',
+  coaching: 'Coaching',
+  admin: 'Admin',
+};
+/**
+ * Paths the edge guard lets through untouched.
+… 155 more lines
+
+Now the admin needs a way to issue those in
+
+  Ran 1 shell command
+
+● Bash(cd "C:/Users/avikk/OneDrive/Desktop/Edee/frontend" && python -
+      <<'PYEOF'
+ok
+41:  const [inviteUrl, setInviteUrl] = useState('');
+46:  const byInvite = needsOrg;
+… +10 lines
+1 file changed (binary, mode only or too
+Now type-check and lint the frontend:
+
+  Ran 4 shell commands
+
+180 frontend tests pass. Docker is up now —
+  Ran 5 shell commands
+
+Real bug caught: email-validator rejects .test as a special-use
+domain, so the default seeded admin address could never log in.
+Fixing the default and the test fixtures:
+● Bash(cd "C:/Users/avikk/OneDrive/Desktop/Edee/backend" && python -
+      <<'PYEOF'
+      import io…)
+ok
+34:    SEED_ADMIN_EMAIL: str = "admin@ed
+Updated ~\OneDrive\Desktop\Edee\backend\app\core\config.py
+(+119 -115)
+from pydantic_settings import BaseSettings
+from pydantic import field_validator
+from typing import List, Optional
+
+class Settings(BaseSettings):
+    DATABASE_URL: str
+    FIREBASE_SERVICE_ACCOUNT_PATH: str
+    RAZORPAY_KEY_ID: str
+    RAZORPAY_WEBHOOK_SECRET: str
+    ENVIRONMENT: str = "development"
+    LOG_LEVEL: str = "INFO"
+    # Dev mode override. 1 forces dev mode on (dev:
+tokens accepted) even
+ut them. Unset means
+    # auto-detect (dev mode when no service account
+is configured in
+    # development). Local development only: staging/
+production refuse to
+    DEV_MODE: Optional[bool] = None
+
+    # Signs the session tokens the local email/passw
+ord path issues (see
+    # app/core/local_token.py). Un
+    # platform can authenticate people while no serv
+ice account is
+    # configured. Staging and production refuse to b
+oot without it;
+    # development falls back to a
+    AUTH_SECRET: str = ""
+
+    # Seeded admin account for the local path, so a
+fresh database has one way
+    # in. seeds/users.py refuses t
+    SEED_ADMIN_EMAIL: str = "admin@local.test"
+    SEED_ADMIN_PASSWORD: str = "Test@1234"
+
+    # How long a college or coaching set-password li
+nk stays usable. Long
+rding it on, short enough
+    # that a link left in an inbox is not a permanen
+t way in.
+    INVITE_TTL_DAYS: int = 14
+
+Firebase allows 5 minutes
+    # to 14 days. Eight hours covers a working day;
+the frontend's two-hour
+    # idle logout is what ends an unattended session
+ sooner, and this is the
+… 1 more file changed
+
+  Ran 1 shell command
+
+All 40 pass. Now the full backend suite to
+
+  Ran 3 shell commands
+
+● Bash(cd "C:/Users/avikk/OneDrive/Desktop/Edee/backend" &&
+      .venv/Scripts/python.exe -m ruff check
+Found 1 error (1 fixed, 0 remaining).
+All checks passed!
+Updated
+~\OneDrive\Desktop\Edee\backend\app\routers\students.py (+0
+-1)
+from app.core.rate_limit import limited
+from uuid import UUID
+import uuid
+import logging
+
+
+  Ran 2 shell commands
+
+Migration 010 applies cleanly on a full chain. Now the seed and a
+live end-to-end run:
+  Ran 3 shell commands
+
+● Background command "Start API for smoke test" completed (exit code
+0)
+
+
+Hash is $2b$12$…, 60 chars. Now the invite flow end to end:
+
+  Ran 1 shell command
+
+validation fired before the invite check. Re-checking with a valid
+one:
+
+  Ran 4 shell commands
+
+      import io…)
+ok
+15:AUTH_SECRET=
+21:# SEED_ADMIN_EMAIL=admin@edeeapply.in
+… +2 lines
+-47)
+# Host port 5433: the Docker Postgres is published th
+ere to avoid colliding
+# with any locally-installed PostgreSQL already on 54
+32.
+433/college_platform
+
+# Path to the Firebase Admin service account JSON. Th
+is file is a master key
+# for the whole auth project: it ca
+# role. It is gitignored; keep it that way.
+FIREBASE_SERVICE_ACCOUNT_PATH=./firebase-service-acco
+unt.json
+
+RAZORPAY_KEY_ID=your_razorpay_key_i
+RAZORPAY_WEBHOOK_SECRET=your_razorpay_webhook_secret
+
+# Comma-separated browser origins allowed to call thi
+s API.
+# Never "*": the API sends credenti
+# lets any site a signed-in student visits read their
+ data.
+CORS_ORIGINS=http://localhost:3000
+
+# development | test | staging | pr
+# Anything other than development turns off SQL echo
+(which logs names, emails
+# and phone numbers), and production also hides /docs
+ and /openapi.json.
+ENVIRONMENT=development
+
+# DEBUG | INFO | WARNING | ERROR. INFO logs one line
+per request plus
+# signups, orders, payments and role changes. Health
+checks log at DEBUG.
+LOG_LEVEL=INFO
+
+# Dev mode override: 1 forces dev mode on (dev: token
+s accepted) even with
+# Firebase keys; 0 forces it off even without them. L
+eave unset to
+# auto-detect (dev mode when no service account is co
+nfigured).
+# Local development only: staging and production refu
+se to boot with it set.
+# DEV_MODE=1
+
+# Public site origin, for absolute links inside email
+s.
+PUBLIC_URL=http://localhost:3000
+
+# Outbound email (transactional: de
+ invites, alerts).
+# Leave SMTP_HOST empty to disable: sends become log
+lines, which is what
+# local development wants. Production needs a real re
+lay.
+      import io…)
+ok
+120:**Only the student portal has signup.** `POST /auth/sign
+up` is the one
+… +11 lines
+Updated ~\OneDrive\Desktop\Edee\README.md (+30 -4)
+```text
+DATABASE_URL=postgresql+asyncpg://dev:dev@localhost:
+5433/college_platform
+FIREBASE_SERVICE_ACCOUNT_PATH=./firebase-service-acc
+ount.json
+ssues. Nothing to do with
+# Firebase - it is what lets people sign in while no
+ service account exists.
+# `openssl rand -hex 32`. Staging and production REF
+USE TO BOOT without it;
+rns loudly.
+AUTH_SECRET=
+# The account `python -m seeds.local_admin` creates.
+ Must be a real domain:
+# the login endpoint rejects .test
+# SEED_ADMIN_PASSWORD=Test@1234
+# Days a college/coaching set-password link stays us
+able.
+# INVITE_TTL_DAYS=14
+RAZORPAY_KEY_ID=
+RAZORPAY_WEBHOOK_SECRET=
+
+
+Auth and session:
+
+e ID token for a session
+  cookie. Called by the Next.js route handler, never
+ by the browser directly.
+- `POST /auth/session` — exchange a credential for a
+ session cookie. A Firebase
+session token is returned
+  as its own. Called by the Next.js route handler, n
+ever by the browser.
+- `DELETE /auth/session` — revoke every session the
+account holds
+rrent credential; this is
+  what lets the server open the role gate before hyd
+ration
+
+Every authenticated endpoint accep
+or `X-Session-Cookie: <session cookie>`.
+Email and password:
+
+- `POST /auth/signup` — create a student account (na
+me, email, phone,
+udents only.
+- `POST /auth/login` — email and password for any of
+ the four portals; the
+  response carries the role, and the caller decides
+where to send them
+drops every other session
+- `POST /auth/invites` — admin only; issues a colleg
+e or coaching
+  set-password link
+… 10 more lines
+  Ran 1 shell command
+
+● Bash(cd "C:/Users/avikk/OneDrive/Desktop/Edee" && python - <<'PYEOF'
+      import io…)
+<stdin>:7: SyntaxWarning: invalid escape
+ok
+… +8 lines
+Updated ~\OneDrive\Desktop\Edee\README.md (+7 -5)
+removes a stale `college-platform-db` container; star
+ts Postgres; creates
+missing; copies `.env`
+files only when missing; waits for Postgres health; r
+uns migrations and college
+seeds; seeds demo accounts only when a Firebase servi
+ce account exists; then
+ccounts only when a
+service account exists; then
+opens backend and frontend server windows and waits u
+ntil both respond.
+
+
+cd backend
+python -m venv venv
+venv\Scripts\python -m pip install -r requirements.tx
+t
+fill in Firebase and Razorpay
+copy .env.example .env                             #
+set AUTH_SECRET; Firebase optional
+venv\Scripts\python -m alembic upgrade head
+venv\Scripts\python -m seeds.colleg
+the one account a fresh database needs
+venv\Scripts\python -m seeds.users                 #
+only with a Firebase service account
+venv\Scripts\python -m uvicorn app.main:app --reload
+--port 8000
+
+|------|------------|
+| **API** | FastAPI 0.115 (async) |
+| **DB** | PostgreSQL 16 (asyncpg) |
+| **Migrations** | Alembic (9 migr
+|
+| **Rendering** | Next.js 16 App Router — portal pag
+es server-rendered via session cookie |
+| **Auth** | Firebase Admin SDK (JWT verification);
+phone OTP in production, any-4-dig
+| **Payments** | Razorpay (order creation + webhook)
+ |
+
+│  │  ├─ services/      # Razorpay client, Firebase
+role claims, email, lead files
+ploads (gitignored, volume-backed)
+│  │  └─ main.py        # FastAPI entry point
+│  ├─ migrations/        # Alembic 001–009
+│  ├─ seeds/             # colleges, demo role accou
+nts
+│  ├─ seeds/             # colleges, the local admin
+, demo role accounts
+│  ├─ tests/             # pytest suite
+│  ├─ Dockerfile
+│  ├─ requirements.txt
+  Ran 2 shell commands
+
+● Bash(cd "C:/Users/avikk/OneDrive/Desktop/Edee" && python - <<'PYEOF'
+      import io…)
+<stdin>:16: SyntaxWarning: invalid escap
+ok
+1 file changed (binary, mode only or too large to show)
+
+  Ran 1 shell command
+
+      import io…)
+replaced
+271:"%BACKEND%\venv\Scripts\python.exe" -m seeds.local_admin
+274:    echo        "%BACKEND%\venv\Scripts\python.exe" -m s
+… +3 lines
+Updated ~\OneDrive\Desktop\Edee\start.bat (+17 -4)
+popd
+
+rem ------------------------------------------------
+---------------------------
+rem 6. Seed demo accounts (needs a real Firebase ser
+vice account)
+rem 6. Seed accounts
+rem
+rem The local admin needs nothing but the database,
+so it always runs: it is
+rem the one way into a fresh install, and every othe
+r account is created
+rem through the product from there. The Firebase dem
+o accounts are extra, and
+rem only possible with a real service account.
+rem ------------------------------------------------
+---------------------------
+echo.
+echo [6/7] Demo accounts...
+echo [6/7] Accounts...
+pushd "%BACKEND%"
+"%BACKEND%\venv\Scripts\python.exe" -m seeds.local_a
+dmin
+if errorlevel 1 (
+    echo [WARN] Admin seed failed. Nobody can reach
+the admin portal until it runs:
+    echo        "%BACKEND%\venv\Scripts\python.exe"
+-m seeds.local_admin
+)
+popd
+
+if exist "%BACKEND%\firebase-service-account.json" (
+    echo [ok] Firebase service account found - creat
+ing one demo account per role...
+    pushd "%BACKEND%"
+    "%BACKEND%\venv\Scripts\python.exe" -m seeds.use
+rs
+    popd
+) else (
+    echo [skip] No firebase-service-account.json in
+backend\. Sign-in and the demo
+    echo       accounts need a real Firebase project
+. See backend\.env.example.
+    echo [skip] No firebase-service-account.json in
+backend\. Google and phone
+    echo       sign-in need a real Firebase project;
+ email and password do not.
+)
+
+rem ------------------------------------------------
+---------------------------
+
+  Ran 2 shell commands
+
+● Bash(cd "C:/Users/avikk/OneDrive/Desktop/Edee" && python - <<'PYEOF'
+      import io…)
+ok
+docker-compose.yml:32:      AUTH_SECRET:
+… +4 lines
+Updated ~\OneDrive\Desktop\Edee\docker-compose.prod.yml
+(+103 -99)
+# Production overlay. The base file is development-o
+riented (bind mounts,
+e services into something
+# a domain can point at.
+#
+# Usage, from the repository root:
+#   cp .env.prod.example .env
+#   # place backend/firebase-service-account.json (g
+itignored, never committed)
+#   docker compose -f docker-compose.yml -f docker-c
+ompose.prod.yml up -d --build
+#   docker compose -f docker-compo
+#     alembic -c /app/alembic.ini upgrade head
+#
+# Every ${...} below has NO default on purpose: comp
+ose fails fast naming the
+# missing variable instead of boot
+# your reverse proxy (the app sends HSTS in producti
+on); point the proxy at
+# 127.0.0.1:8000 (API) and 127.0.0.1:3000 (web).
+
+services:
+    restart: unless-stopped
+
+  backend:
+    # Named image so a registry deploy can `pull` a
+released tag instead of
+ just tags the local build.
+    image: ${BACKEND_IMAGE:-edee-apply-backend:prod}
+    # No code bind mount: the image already contains
+ the code, and overlaying
+    # it would smuggle host .env f
+    # mounted, read-only. (!override because plain l
+ists union with the base.)
+    volumes: !override
+      - type: bind
+        source: ./backend/firebase
+        target: /app/firebase-service-account.json
+        read_only: true
+      # Uploaded college logos live on disk; without
+ this they vanish on
+      # every redeploy.
+        source: uploads-data
+        target: /app/uploads
+    # No --reload here (the dev command is replaced)
+. To scale past one
+    # worker, extend this command
+    # small pool (see app/db/connection.py), so size
+ Postgres accordingly.
+… 162 more lines
+Updated ~\OneDrive\Desktop\Edee\docker-compose.yml (+71 -67)
+services:
+    image: postgres:16
+    container_name: college-platform-db
+    environment:
+      POSTGRES_USER: dev
+      POSTGRES_PASSWORD: dev
+    # Bound to loopback. Without the 127.0.0.1 prefix
+ Docker publishes on
+    # 0.0.0.0, which puts a dev/dev Postgres on every
+ network the laptop joins.
+    # Published on 5433 (not 5432)
+    # PostgreSQL on 5432; using 5433 means this conta
+iner never fights it.
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dev -d colle
+ge_platform"]
+      interval: 10s
+      timeout: 5s
+
+  backend:
+    build: ./backend
+    container_name: college-platform-backend
+    environment:
+432/college_platform
+      FIREBASE_SERVICE_ACCOUNT_PATH: /app/firebase-se
+rvice-account.json
+      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID}
+      RAZORPAY_KEY_SECRET: ${RAZORP
+RET}
+      CORS_ORIGINS: http://localhost:3000
+      ENVIRONMENT: development
+    ports:
+      - "127.0.0.1:8000:8000"
+      - ./backend:/app
+    depends_on:
+      db:
+        condition: service_healthy
+… 98 more lines
+
+  Ran 1 shell command
+
+Pre-existing: the build needs NEXT_PUBLIC_API_URL for the rewrite. Setting it:

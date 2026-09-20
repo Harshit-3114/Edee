@@ -534,8 +534,9 @@ FIREBASE_SERVICE_ACCOUNT_PATH=./firebase-service-account.json
 AUTH_SECRET=
 # The account `python -m seeds.local_admin` creates. Must be a real domain:
 # the login endpoint rejects .test and .localhost.
-# SEED_ADMIN_EMAIL=admin@edeeapply.in
-# SEED_ADMIN_PASSWORD=Test@1234
+# Set these in your .env file - do not commit real credentials
+# SEED_ADMIN_EMAIL=admin@yourdomain.com
+# SEED_ADMIN_PASSWORD=your-secure-password
 # Days a college/coaching set-password link stays usable.
 # INVITE_TTL_DAYS=14
 RAZORPAY_KEY_ID=

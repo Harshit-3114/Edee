@@ -24,7 +24,9 @@ from app.db.connection import get_session_factory  # noqa: E402
 from app.services.firebase import assign_role  # noqa: E402
 from app.middleware.auth import _firebase_app  # noqa: E402
 
-PASSWORD = "Test@1234"
+# Password for seeded Firebase users - must be set via environment variable
+# SEED_FIREBASE_PASSWORD=your-secure-password
+SEED_FIREBASE_PASSWORD: str = settings.SEED_ADMIN_PASSWORD  # reuse same password pattern
 
 SEED_USERS = [
     ("admin@local.test", "Nikhil Raut", "admin"),
@@ -72,10 +74,10 @@ async def main() -> None:
         for email, name, role in SEED_USERS:
             try:
                 fb_user = firebase_auth.get_user_by_email(email, app=app)
-                firebase_auth.update_user(fb_user.uid, password=PASSWORD, app=app)
+                firebase_auth.update_user(fb_user.uid, password=SEED_FIREBASE_PASSWORD, app=app)
             except firebase_auth.UserNotFoundError:
                 fb_user = firebase_auth.create_user(
-                    email=email, password=PASSWORD, display_name=name, app=app
+                    email=email, password=SEED_FIREBASE_PASSWORD, display_name=name, app=app
                 )
 
             row_id = uuid.uuid4()
@@ -134,7 +136,7 @@ async def main() -> None:
                 assign_role(fb_user.uid, "admin")
                 where = "Platform"
 
-            print(f"{role:9} {email:24} {PASSWORD}   -> {where}")
+            print(f"{role:9} {email:24} {SEED_FIREBASE_PASSWORD}   -> {where}")
 
         await db.commit()
 
