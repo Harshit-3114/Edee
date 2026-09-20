@@ -56,19 +56,58 @@ DATABASE_URL="<neon‑url>" alembic upgrade head
 5. Enable **Autoscaling** & **Point‑in‑time‑recovery (PITR)** in the Neon dashboard.
 
 ---
-
+ 
 ## 4️⃣  CI/CD – GitHub Actions (`.github/workflows/ci.yml`)
-
+ 
 The workflow already does:
-
+ 
 * **Frontend** – `npm ci → lint → typecheck → test`
 * **Backend** – `pip install → pytest → alembic dry‑run`
 * **Docker build** – builds both images, tags with git SHA, pushes to GHCR (optional)
-
+ 
 **What to watch:**
 * ✅ All jobs green → Render & Vercel auto‑deploy.
 * ❌ Any red job blocks deploy – fix before merging.
-
+ 
+---
+ 
+## 10️⃣  Deploy Workflow & Required GitHub Secrets
+ 
+A second workflow (`.github/workflows/deploy-render.yml`) runs on every push to `main` (and on `workflow_dispatch`). It performs the actual production deploy:
+ 
+| Job | What it does |
+|-----|--------------|
+| **deploy-backend** | Calls the Render *Deploy Hook* (`RENDER_DEPLOY_HOOK`) → Render pulls the latest backend image, runs `alembic upgrade head` (via `preDeployCommand`) and restarts the service. |
+| **deploy-frontend** | 1. Installs Vercel CLI.<br>2. `vercel pull --yes --environment=production` – downloads the **production** environment variables (including all `NEXT_PUBLIC_…` values) into the runner.<br>3. `vercel build --prod` – compiles the Next.js app with those vars.<br>4. `vercel deploy --prebuilt --prod` – pushes the pre‑built output to Vercel. |
+ 
+### Required GitHub Repository Secrets
+ 
+| Secret name | Where to obtain | Why it’s needed |
+|-------------|----------------|-----------------|
+| `VERCEL_TOKEN` | Vercel → **Account → Tokens** → *Create* (name it *GitHub‑Actions‑Deploy*) | Authenticates the Vercel CLI for `pull`, `build`, and `deploy`. |
+| `RENDER_DEPLOY_HOOK` | Render → **your service → Settings → Deploy Hook** (copy the URL) | Allows the workflow to trigger a new Render deploy with a simple `curl`. |
+ 
+**How to add them**
+1. In GitHub go to **Settings → Secrets and variables → Actions → New repository secret**.  
+2. Add `VERCEL_TOKEN` (paste the Vercel personal access token).  
+3. Add `RENDER_DEPLOY_HOOK` (paste the Render deploy‑hook URL).  
+ 
+> **If the workflow fails with** `Error: You defined "--token", but it's missing a value` **the `VERCEL_TOKEN` secret is missing or empty.** Add/rotate it and re‑run the workflow.
+ 
+### Troubleshooting the Deploy Workflow
+* **`vercel pull` fails** – token expired or wrong scope → create a new Vercel token and update the secret.  
+* **Render deploy hook returns 404** – the hook URL changed (service recreated) → copy the new URL into `RENDER_DEPLOY_HOOK`.  
+* **Branch triggers** – workflow runs on `main` and `stiched` (typo?). Adjust `on.push.branches` in `deploy-render.yml` if you rename/remove branches.  
+* **Secrets not masked** – GitHub automatically masks secret values in logs; verify no raw values appear.  
+ 
+### Regular checks for the Deploy pipeline
+| Frequency | Check |
+|-----------|-------|
+| **Every 90 days** | Vercel personal access tokens expire → generate a new token and update `VERCEL_TOKEN`. |
+| **When Render service is recreated** | Deploy‑hook URL changes → update `RENDER_DEPLOY_HOOK`. |
+| **On every PR / audit** | Ensure no secret values appear in workflow logs (they are masked automatically). |
+| **When Vercel project settings change** (domains, env vars) | Keep `vercel.json` and Vercel project env vars in sync with what the workflow pulls. |
+ 
 ---
 
 ## 5️⃣  Security & Performance Hardening (already baked in)
@@ -120,14 +159,16 @@ git push origin main
 ---
 
 ## 7️⃣  Ongoing Operations (what to **regularly check**)
-
+ 
 | Frequency | Action |
 |-----------|--------|
 | **Daily** | Render / Vercel health‑check dashboards (green = OK). |
 | **Weekly** | Render logs & Vercel Functions logs for errors / latency spikes. |
 | **Bi‑weekly** | `npm audit` & `pip-audit` (CI already runs, but glance at reports). |
 | **Monthly** | Rotate `AUTH_SECRET`, Razorpay keys, Firebase service‑account (store new values in Render/Vercel secret UI). |
+| **Every 90 days** | Rotate Vercel personal access token → update `VERCEL_TOKEN` secret. |
 | **Quarterly** | Upgrade base images (`python:3.12-slim`, `node:20-alpine`) in both `Dockerfile.prod` files; run full test suite. |
+| **When Render service is recreated** | Deploy‑hook URL changes → update `RENDER_DEPLOY_HOOK` secret. |
 | **On schema change** | Add a new Alembic revision → push → Render runs `preDeployCommand` automatically. |
 | **Incident** | Use Render “Logs” + Vercel “Function Logs” → correlate timestamps → fix → redeploy. |
 
