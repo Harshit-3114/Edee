@@ -1,3 +1,4 @@
+import json
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
@@ -15,6 +16,17 @@ router = APIRouter()
 def _with_gallery(row: Any) -> dict:
     row = dict(row)
     row["landing_gallery_urls"] = parse_gallery(row.get("landing_gallery_urls"))
+    # faqs may come back as JSON string from raw SQL
+    faqs = row.get("faqs")
+    if isinstance(faqs, str):
+        try:
+            row["faqs"] = json.loads(faqs)
+        except Exception:
+            row["faqs"] = []
+    elif faqs is None:
+        row["faqs"] = []
+    else:
+        row["faqs"] = faqs
     return row
 
 
@@ -226,6 +238,9 @@ async def get_college_by_slug(
                    c.landing_gallery_urls,
                    c.application_phases,
                    c.logo_url,
+                   c.video_url,
+                   c.overview,
+                   c.faqs,
                    COALESCE(
                        json_agg(
                            json_build_object(
@@ -235,20 +250,20 @@ async def get_college_by_slug(
                                'stream', cc.stream,
                                'duration_years', cc.duration_years,
                                'seats', cc.seats,
-                                'application_fee', cc.application_fee * 100,
-                                'active', cc.active,
-                                'application_start_date', cc.application_start_date,
-                                'intake_info', cc.intake_info,
-                                'closing_date', cc.closing_date
-                            )
-                            ORDER BY cc.course_name
-                        ) FILTER (WHERE cc.id IS NOT NULL),
-                        '[]'
-                    ) AS courses
-             FROM colleges c
-             LEFT JOIN college_courses cc
-                    ON cc.college_id = c.id AND cc.active = true
-             WHERE c.slug = :slug AND c.active = true
+                               'application_fee', cc.application_fee * 100,
+                               'active', cc.active,
+                               'application_start_date', cc.application_start_date,
+                               'intake_info', cc.intake_info,
+                               'closing_date', cc.closing_date
+                           )
+                           ORDER BY cc.course_name
+                       ) FILTER (WHERE cc.id IS NOT NULL),
+                       '[]'
+                   ) AS courses
+            FROM colleges c
+            LEFT JOIN college_courses cc
+                   ON cc.college_id = c.id AND cc.active = true
+            WHERE c.slug = :slug AND c.active = true
             GROUP BY c.id
             """
         ),

@@ -6,6 +6,7 @@ this the highest-value router in the codebase, so every write appends to
 audit_events and role assignment lives here and nowhere else.
 """
 import os
+import json
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
@@ -247,6 +248,7 @@ async def get_college(college_id: UUID, db: AsyncSession = Depends(get_db)):
             SELECT c.id, c.name, c.slug, c.location, c.city, c.state, c.type, c.active,
                    c.landing_hero_image_url, c.landing_description,
                    c.landing_gallery_urls, c.application_phases, c.logo_url,
+                   c.video_url, c.overview, c.faqs,
                    COALESCE(
                        json_agg(
                            json_build_object(
@@ -293,6 +295,17 @@ async def get_college(college_id: UUID, db: AsyncSession = Depends(get_db)):
     )
     detail = dict(row._mapping)
     detail["landing_gallery_urls"] = parse_gallery(detail.get("landing_gallery_urls"))
+    # parse faqs if stored as JSON string
+    faqs = detail.get("faqs")
+    if isinstance(faqs, str):
+        try:
+            detail["faqs"] = json.loads(faqs)
+        except Exception:
+            detail["faqs"] = []
+    elif faqs is None:
+        detail["faqs"] = []
+    else:
+        detail["faqs"] = faqs
     return {**detail, "staff": [dict(r._mapping) for r in staff.fetchall()]}
 
 

@@ -51,6 +51,12 @@ class College(Base):
     application_phases = Column(Text)
     # College mark uploaded through the admin portal.
     logo_url = Column(Text)
+    # YouTube video link for the college (embed URL)
+    video_url = Column(Text)
+    # Overview text shown on landing page
+    overview = Column(Text)
+    # Frequently asked questions as JSON array of {question, answer}
+    faqs = Column(JSONB)
     active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), default=_utcnow, server_default=func.now())
 

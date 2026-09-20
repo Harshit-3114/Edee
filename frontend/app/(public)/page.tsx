@@ -1,3 +1,6 @@
+'use client';
+
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import {
@@ -13,9 +16,11 @@ import {
 import LinkButton from '@/components/ui/LinkButton';
 import Reveal from '@/components/ui/Reveal';
 import PartnerCarousel from './_components/PartnerCarousel';
+import CollegeLogoCarousel from '@/components/ui/CollegeLogoCarousel';
 import SiteFooter from './_components/SiteFooter';
 import SiteHeader from './_components/SiteHeader';
 import { FAQS } from './_components/faqs';
+import type { College } from '@/lib/types';
 
 const STEPS = [
   {
@@ -67,6 +72,25 @@ const AUDIENCES = [
 ];
 
 export default function LandingPage() {
+  const [colleges, setColleges] = useState<College[]>([]);
+
+  useEffect(() => {
+    async function fetchColleges() {
+      try {
+        const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+        const res = await fetch(`${apiBase}/colleges?limit=50`);
+        if (res.ok) {
+          const data = await res.json();
+          // API returns array of colleges directly
+          setColleges(data);
+        }
+      } catch (e) {
+        console.error('Failed to fetch colleges for carousel', e);
+      }
+    }
+    fetchColleges();
+  }, []);
+
   return (
     <div className="min-h-[100dvh]">
       <SiteHeader />
@@ -144,6 +168,8 @@ export default function LandingPage() {
             </div>
           </section>
         </div>
+
+        {colleges.length > 0 && <CollegeLogoCarousel colleges={colleges} />}
 
         <PartnerCarousel />
 
