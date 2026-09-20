@@ -1,4 +1,4 @@
-name: Deploy to Render
+name: Deploy to Render & Vercel
 
 on:
   push:
@@ -12,11 +12,9 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Deploy to Render
-        uses: render/actions@v1
-        with:
-          apiKey: ${{ secrets.RENDER_API_KEY }}
-          serviceId: ${{ secrets.RENDER_BACKEND_SERVICE_ID }}
-          clearCache: false
+        if: ${{ secrets.RENDER_DEPLOY_HOOK != '' }}
+        run: |
+          curl -X POST ${{ secrets.RENDER_DEPLOY_HOOK }}
 
   deploy-frontend:
     runs-on: ubuntu-latest
@@ -28,11 +26,17 @@ jobs:
 
       - name: Pull Vercel Environment
         run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
 
       - name: Build Project Artifacts
         run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
         working-directory: frontend
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
 
       - name: Deploy to Vercel
         run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
         working-directory: frontend
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
