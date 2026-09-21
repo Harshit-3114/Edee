@@ -34,13 +34,23 @@ const nextConfig: NextConfig = {
   async headers() {
     const PUBLIC_CACHE =
       'public, max-age=0, s-maxage=3600, stale-while-revalidate=86400';
-    const publicPaths = ['/', '/about', '/why-us', '/contact', '/colleges', '/colleges/:slug'];
+    // College landing pages change when an admin edits the college, so the
+    // edge holds them only briefly: at most a minute stale, then revalidated
+    // in the background. (The page itself renders per request and the client
+    // refreshes on mount, so this is only the CDN layer.)
+    const LANDING_CACHE =
+      'public, max-age=0, s-maxage=60, stale-while-revalidate=300';
+    const publicPaths = ['/', '/about', '/why-us', '/contact', '/colleges'];
 
     return [
       ...publicPaths.map((source) => ({
         source,
         headers: [{ key: 'Cache-Control', value: PUBLIC_CACHE }],
       })),
+      {
+        source: '/colleges/:slug',
+        headers: [{ key: 'Cache-Control', value: LANDING_CACHE }],
+      },
       {
         // Portals, plus the screens that carry an account into existence.
         source: '/:path(student|college|coaching|admin|login|signup|auth):rest(/.*)?',

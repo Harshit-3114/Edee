@@ -189,7 +189,8 @@ Cache policy is split by audience, in `frontend/next.config.ts`:
 
 | Routes | `Cache-Control` |
 |---|---|
-| `/`, `/about`, `/why-us`, `/contact`, `/colleges`, `/colleges/:slug` | `public, max-age=0, s-maxage=3600, stale-while-revalidate=86400` |
+| `/`, `/about`, `/why-us`, `/contact`, `/colleges` | `public, max-age=0, s-maxage=3600, stale-while-revalidate=86400` |
+| `/colleges/:slug` | `public, max-age=0, s-maxage=60, stale-while-revalidate=300` — an admin edit must reach the landing page, so the edge holds it only briefly |
 | `/student/*`, `/college/*`, `/coaching/*`, `/admin/*`, `/login`, `/signup`, `/auth/*` | `private, no-store` + `Vary: Cookie` |
 
 Public pages render identically for every viewer — the account menu resolves in

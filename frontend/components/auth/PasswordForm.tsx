@@ -26,9 +26,11 @@ import type { Role } from '@/lib/portals';
  * and say so when they knocked on the wrong portal's door.
  *
  * In dev mode there is no separate developer panel: this same form accepts any
- * email and password. A real credential still signs in through /auth/login;
- * anything else falls back to provisioning a mock user for the current portal,
- * so every portal is reachable with whatever you type.
+ * email and password, except on the admin portal. A real credential still
+ * signs in through /auth/login; anything else falls back to provisioning a
+ * mock user for the current portal, so every other portal is reachable with
+ * whatever you type. The admin portal answers only to the seeded admin
+ * credential in the database - no mock admins exist.
  */
 export default function PasswordForm({
   portal,
@@ -83,8 +85,11 @@ export default function PasswordForm({
           onError(apiErrorMessage(err, 'Too many attempts. Try again in a minute.'));
           return;
         }
+        // The admin portal never falls back to a mock identity: only the
+        // seeded admin credential in the database opens it.
         const dev =
-          devBypass ?? (isDevModeForced() || (await fetchBackendDevMode()));
+          portal !== 'admin' &&
+          (devBypass ?? (isDevModeForced() || (await fetchBackendDevMode())));
         if (!dev) {
           // The API says the same thing for every failure on purpose; passing
           // it through keeps the UI from inventing a more specific reason.
@@ -162,7 +167,11 @@ export default function PasswordForm({
 
       <Field
         label="Password"
-        hint={devBypass ? 'Dev mode: any email and password works.' : undefined}
+        hint={
+          devBypass && portal !== 'admin'
+            ? 'Dev mode: any email and password works.'
+            : undefined
+        }
         required
       >
         {(fieldProps) => (

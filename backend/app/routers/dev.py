@@ -96,6 +96,15 @@ async def mock_user(body: MockUserIn, db: AsyncSession = Depends(get_db)):
     """
     _require_dev_mode()
 
+    # No mock admins, even in dev: the admin panel answers only to the
+    # seeded admin credential in auth_credentials. Anything else - a second
+    # admin, a throwaway - is created by that admin through the product.
+    if body.role == "admin":
+        raise HTTPException(
+            status_code=403,
+            detail="Mock admins are disabled - sign in with the seeded admin account",
+        )
+
     tag = (body.tag or "").strip()
     if tag and not TAG_RE.match(tag):
         raise HTTPException(

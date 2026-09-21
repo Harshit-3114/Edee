@@ -47,12 +47,37 @@ export default function CollegeLandingClient({
     }
   }, [slug]);
 
-  // Only when the server could not supply it.
+  // Only the full load when the server could not supply it.
   const served = useRef(Boolean(initialCollege));
   useEffect(() => {
     if (served.current) return;
     void load();
   }, [load]);
+
+  // Refresh in the background even when the server did supply it. The served
+  // HTML may be edge-cached, so an admin edit can lag behind it; the visitor
+  // keeps reading the served copy and it swaps to fresh data when the fetch
+  // lands. Failures are silent on purpose - the served copy stays.
+  useEffect(() => {
+    if (!served.current) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await api.get<CollegeLanding>(
+          `/colleges/by-slug/${encodeURIComponent(slug)}`,
+        );
+        if (!cancelled) {
+          setCollege(data);
+          setMissing(false);
+        }
+      } catch {
+        /* keep the served copy */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [slug]);
 
   if (loading) {
     return (
