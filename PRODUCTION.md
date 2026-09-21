@@ -182,7 +182,7 @@ git push origin main
 | `backend/migrations/` | Migration scripts, chain 001→latest (run on every deploy). |
 | `backend/requirements.txt` | Pinned Python deps (run `pip-audit`). |
 | `frontend/next.config.prod.js` | Next.js production config (`output: standalone`). |
-| `frontend/vercel.json` | Rewrites `/api/*` → Render, CSP / security headers. |
+| `frontend/vercel.json` | Singapore region pin, CSP / security headers. (No rewrites: the app calls the API base URL directly.) |
 | `.github/workflows/ci.yml` | Full CI pipeline (lint, test, docker build). |
 | `render.yaml` (optional) | Infrastructure‑as‑code for Render service. |
 | `start.bat` | Local one‑click dev launcher (unchanged). |
