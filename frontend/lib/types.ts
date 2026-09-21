@@ -40,6 +40,12 @@ export interface College {
   logo_url?: string | null;
 }
 
+/** One frequently-asked question on a college landing page. */
+export interface CollegeFaq {
+  question: string;
+  answer: string;
+}
+
 /** What GET /colleges/by-slug/:slug returns. Always complete. */
 export interface CollegeLanding {
   id: string;
@@ -56,6 +62,12 @@ export interface CollegeLanding {
   application_phases: string | null;
   /** Backend-served path (e.g. /uploads/logos/…) or absolute URL. */
   logo_url: string | null;
+  /** YouTube embed URL for the campus video. Null when the college sets none. */
+  video_url: string | null;
+  /** Long-form overview, shown above the short landing description. */
+  overview: string | null;
+  /** Ordered Q&A list. Empty array when the college sets none. */
+  faqs: CollegeFaq[] | null;
   courses: Course[];
 }
 

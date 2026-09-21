@@ -25,6 +25,9 @@ const landing: CollegeLanding = {
   landing_gallery_urls: ['https://img.example/1.jpg', 'https://img.example/2.jpg'],
   application_phases: 'Phase 1: Jun-Jul; Phase 2: Aug.',
   logo_url: null,
+  video_url: null,
+  overview: null,
+  faqs: [],
   courses: [
     {
       id: 'crs-1',
