@@ -24,6 +24,7 @@ and both can be live at once.
 """
 import hashlib
 import logging
+import re
 import secrets
 import time
 import uuid
@@ -44,6 +45,7 @@ from app.core.rate_limit import limited
 from app.db.connection import get_db
 from app.middleware.auth import _firebase_app, get_current_user, require_roles
 from app.models.auth import (
+    PHONE_RE,
     InviteAcceptIn,
     InviteCreateIn,
     InviteDetail,
@@ -395,9 +397,11 @@ async def login(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Exchange an email and password for a session token.
+    Exchange an email or phone number plus password for a session token.
 
-    Used by all four portals. The response says which role the account holds
+    Used by all four portals. Students may sign in with either the email or
+    the mobile number they signed up with; staff accounts have no phone, so
+    only an email reaches them. The response says which role the account holds
     and the caller decides where to send them, exactly as the Firebase path
     does - so signing in at the wrong door is caught by the same UI, with the
     same offer to continue to the right one.
@@ -406,26 +410,55 @@ async def login(
     password" and "account disabled" are three different facts, and handing
     them to an anonymous caller turns this endpoint into a directory.
     """
-    email = str(body.email).lower().strip()
+    identifier = body.identifier.strip()
+    digits = re.sub(r"\D", "", identifier)[-10:]
 
-    row = (
-        await db.execute(
-            text(
-                """
-                SELECT id, uid, email, password_hash, role, college_id,
-                       coaching_centre_id, active, token_version
-                FROM auth_credentials WHERE email = :email
-                """
-            ),
-            {"email": email},
+    if PHONE_RE.match(digits):
+        # Student phone login. The phone lives on the student row; its uid
+        # bridges to the credential, so a Firebase-only student (no password
+        # row) reads as a wrong password, exactly like an unknown number.
+        student = (
+            await db.execute(
+                text("SELECT firebase_uid FROM students WHERE phone = :phone"),
+                {"phone": digits},
+            )
+        ).fetchone()
+        row = (
+            (
+                await db.execute(
+                    text(
+                        """
+                        SELECT id, uid, email, password_hash, role, college_id,
+                               coaching_centre_id, active, token_version
+                        FROM auth_credentials WHERE uid = :uid
+                        """
+                    ),
+                    {"uid": student.firebase_uid},
+                )
+            ).fetchone()
+            if student
+            else None
         )
-    ).fetchone()
+    else:
+        email = identifier.lower()
+        row = (
+            await db.execute(
+                text(
+                    """
+                    SELECT id, uid, email, password_hash, role, college_id,
+                           coaching_centre_id, active, token_version
+                    FROM auth_credentials WHERE email = :email
+                    """
+                ),
+                {"email": email},
+            )
+        ).fetchone()
 
     stored = row.password_hash if row else _timing_decoy()
     matched = verify_password(body.password, stored)
 
     if row is None or not matched or not row.active:
-        logger.info("failed local sign-in for %s", email)
+        logger.info("failed local sign-in")
         raise HTTPException(status_code=401, detail="Email or password is incorrect")
 
     # A successful verify is the only moment the plaintext exists, so it is the

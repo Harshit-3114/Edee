@@ -41,17 +41,23 @@ export default function PasswordForm({
   onSuccess: (role: Role) => void | Promise<void>;
   onError: (message: string) => void;
 }) {
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const devBypass = useDevBypass();
+  // Only students have a phone number on record, so only their form offers it.
+  const allowPhone = portal === 'student';
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     onError('');
 
-    if (!email.trim() || !password) {
-      onError('Enter your email address and password.');
+    if (!identifier.trim() || !password) {
+      onError(
+        allowPhone
+          ? 'Enter your email address or mobile number, and your password.'
+          : 'Enter your email address and password.',
+      );
       return;
     }
 
@@ -59,7 +65,7 @@ export default function PasswordForm({
     try {
       try {
         const { data } = await api.post('/auth/login', {
-          email: email.trim().toLowerCase(),
+          identifier: identifier.trim(),
           password,
         });
         // A real credential wins: drop any dev identity and any Firebase user
@@ -96,7 +102,7 @@ export default function PasswordForm({
           onError(apiErrorMessage(err, 'Email or password is incorrect.'));
           return;
         }
-        const role = await devSignIn(email.trim());
+        const role = await devSignIn(identifier.trim());
         await onSuccess(role);
       }
     } catch (err) {
@@ -106,7 +112,7 @@ export default function PasswordForm({
     }
   }
 
-  async function devSignIn(rawEmail: string): Promise<Role> {
+  async function devSignIn(rawIdentifier: string): Promise<Role> {
     // A Firebase session shadows every token the API would otherwise read, so
     // leave it first. Best effort: dev continues regardless.
     try {
@@ -143,7 +149,7 @@ export default function PasswordForm({
 
     const { data: mock } = await api.post<{ token: string }>('/dev/mock-user', {
       role: portal,
-      tag: emailToTag(rawEmail),
+      tag: emailToTag(rawIdentifier),
     });
     const claims = setDevToken(mock.token);
     if (!claims) throw new Error('Could not start a dev session.');
@@ -152,15 +158,15 @@ export default function PasswordForm({
 
   return (
     <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
-      <Field label="Email address" required>
+      <Field label={allowPhone ? 'Email or mobile number' : 'Email address'} required>
         {(fieldProps) => (
           <Input
             {...fieldProps}
-            type="email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            autoComplete="email"
-            placeholder="you@example.com"
+            type={allowPhone ? 'text' : 'email'}
+            value={identifier}
+            onChange={(event) => setIdentifier(event.target.value)}
+            autoComplete={allowPhone ? 'username' : 'email'}
+            placeholder={allowPhone ? 'you@example.com or 98765 43210' : 'you@example.com'}
           />
         )}
       </Field>
@@ -195,12 +201,12 @@ export default function PasswordForm({
 
 /**
  * Turn whatever was typed into a valid dev tag. The mock endpoint only allows
- * letters, digits, `_` and `-`, so dots and `+` addressing become dashes. The
- * tag is part of the dev identity, so different emails stay different people
- * on the student and admin portals.
+ * letters, digits, `_` and `-`, so dots, spaces and `+` addressing become
+ * dashes. The tag is part of the dev identity, so different emails stay
+ * different people on the student portal.
  */
-function emailToTag(rawEmail: string): string {
-  const local = rawEmail.split('@')[0] ?? '';
+function emailToTag(rawIdentifier: string): string {
+  const local = rawIdentifier.split('@')[0] ?? '';
   let tag = local
     .toLowerCase()
     .replace(/[^a-z0-9_-]/g, '-')

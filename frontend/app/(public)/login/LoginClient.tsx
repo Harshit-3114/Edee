@@ -41,7 +41,7 @@ const PORTAL_OPTIONS: { role: Role; hint: string; Icon: typeof GraduationCap }[]
 
 const PORTAL_HELP: Record<Role, string> = {
   student:
-    'Sign in with your email and password, or with Google or your mobile number.',
+    'Sign in with your email or mobile number and password, or with Google or mobile OTP.',
   college:
     'Use the email and password your college account was set up with. New college accounts are created by the platform team.',
   coaching:

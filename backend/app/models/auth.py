@@ -81,7 +81,11 @@ class SignupIn(PasswordField):
 
 
 class LoginIn(BaseModel):
-    email: EmailStr
+    # Email address, or a 10-digit Indian mobile number. The phone lives on
+    # the student row, so only students can sign in that way - staff accounts
+    # have no phone to look up. Deliberately not an EmailStr: a phone number
+    # must reach the router to be recognised as one.
+    identifier: str = Field(min_length=3, max_length=254)
     # Not length-validated. A wrong password is a wrong password; telling
     # somebody their guess was too short is a hint about the real one.
     password: str = Field(max_length=1024)

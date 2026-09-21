@@ -264,7 +264,7 @@ async def test_login_with_the_right_password(api):
     await api.post("/auth/signup", json=SIGNUP)
     res = await api.post(
         "/auth/login",
-        json={"email": SIGNUP["email"], "password": SIGNUP["password"]},
+        json={"identifier": SIGNUP["email"], "password": SIGNUP["password"]},
     )
     assert res.status_code == 200
     assert res.json()["role"] == "student"
@@ -276,7 +276,7 @@ async def test_login_is_case_insensitive_on_email(api):
     await api.post("/auth/signup", json=SIGNUP)
     res = await api.post(
         "/auth/login",
-        json={"email": "Ananya@Example.COM", "password": SIGNUP["password"]},
+        json={"identifier": "Ananya@Example.COM", "password": SIGNUP["password"]},
     )
     assert res.status_code == 200
 
@@ -287,10 +287,10 @@ async def test_login_says_the_same_thing_for_every_failure(api):
     await api.post("/auth/signup", json=SIGNUP)
 
     wrong = await api.post(
-        "/auth/login", json={"email": SIGNUP["email"], "password": "not it"}
+        "/auth/login", json={"identifier": SIGNUP["email"], "password": "not it"}
     )
     unknown = await api.post(
-        "/auth/login", json={"email": "nobody@example.com", "password": "not it"}
+        "/auth/login", json={"identifier": "nobody@example.com", "password": "not it"}
     )
 
     assert wrong.status_code == unknown.status_code == 401
@@ -308,7 +308,7 @@ async def test_deactivated_account_cannot_sign_in(api, db_session):
 
     res = await api.post(
         "/auth/login",
-        json={"email": SIGNUP["email"], "password": SIGNUP["password"]},
+        json={"identifier": SIGNUP["email"], "password": SIGNUP["password"]},
     )
     assert res.status_code == 401
 
@@ -418,7 +418,7 @@ async def test_changing_the_password_drops_other_sessions(api):
     second = (
         await api.post(
             "/auth/login",
-            json={"email": SIGNUP["email"], "password": SIGNUP["password"]},
+            json={"identifier": SIGNUP["email"], "password": SIGNUP["password"]},
         )
     ).json()["token"]
 
@@ -441,7 +441,7 @@ async def test_changing_the_password_drops_other_sessions(api):
 
     old = await api.post(
         "/auth/login",
-        json={"email": SIGNUP["email"], "password": SIGNUP["password"]},
+        json={"identifier": SIGNUP["email"], "password": SIGNUP["password"]},
     )
     assert old.status_code == 401
 
@@ -455,7 +455,7 @@ async def test_changing_the_password_drops_other_sessions(api):
 async def admin_token(api, db_session):
     await make_admin(db_session)
     res = await api.post(
-        "/auth/login", json={"email": "admin@edeeapply.in", "password": "admin-password"}
+        "/auth/login", json={"identifier": "admin@edeeapply.in", "password": "admin-password"}
     )
     assert res.status_code == 200
     return res.json()["token"]
@@ -506,7 +506,7 @@ async def test_admin_invites_a_college_and_it_becomes_an_account(
 
     signed_in = await api.post(
         "/auth/login",
-        json={"email": "priya@fergusson.edu.in", "password": "a college password"},
+        json={"identifier": "priya@fergusson.edu.in", "password": "a college password"},
     )
     assert signed_in.status_code == 200
     assert signed_in.json()["role"] == "college"
