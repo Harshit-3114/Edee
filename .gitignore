@@ -40,3 +40,4 @@ stitch-assets/
 Thumbs.db
 *.swp
 *.log
+.neon
