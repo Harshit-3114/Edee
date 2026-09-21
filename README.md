@@ -109,7 +109,7 @@ they run side by side:
 | Works without a service account | yes | no |
 | Where the password lives | `auth_credentials.password_hash`, bcrypt cost 12 | Firebase's servers |
 | Credential | `edee1.<payload>.<hmac>`, signed by this API | ID token / session cookie |
-| Available to | all four portals | students (Google, phone OTP) |
+| Available to | staff portals permanently; students only until Firebase is configured | students (Google, phone OTP) |
 | Revocation | `token_version` on the row | `check_revoked=True` |
 
 Both produce the same claims (`uid`, `role`, `college_id`,
@@ -118,6 +118,13 @@ identically whichever one signed you in. Local accounts get a `uid` of
 `local:<uuid>` written into the existing `firebase_uid` columns — the column
 name stays because it becomes accurate again the day a service account
 arrives.
+
+Student password sign-in is a stopgap until the Firebase keys arrive: with no
+Firebase project configured the student portal signs in with email or mobile
+number plus password, and the day Firebase is configured that form disappears
+for students (Google/OTP take over, and `/signup` becomes profile completion
+only). Staff portals keep email and password permanently — it is the only
+method they have. The backend endpoints stay either way; only the UI gates.
 
 **Only the student portal has signup.** `POST /auth/signup` is the one
 endpoint on the platform where a stranger can create an account, and it is

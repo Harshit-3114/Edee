@@ -41,12 +41,21 @@ const PORTAL_OPTIONS: { role: Role; hint: string; Icon: typeof GraduationCap }[]
 
 const PORTAL_HELP: Record<Role, string> = {
   student:
-    'Sign in with your email or mobile number and password, or with Google or mobile OTP.',
+    'Sign in with Google or your mobile number to reach your applications.',
   college:
     'Use the email and password your college account was set up with. New college accounts are created by the platform team.',
   coaching:
     'Use the email and password your centre account was set up with. New centre accounts are created by the platform team.',
   admin: 'Platform staff only. Your account already carries the admin role.',
+};
+
+const PORTAL_HELP_DEV: Record<Role, string> = {
+  student: 'Dev mode: sign in with any email and password.',
+  college:
+    'Dev mode: sign in with any email and password. Real college accounts arrive as a set-password link.',
+  coaching:
+    'Dev mode: sign in with any email and password. Real centre accounts arrive as a set-password link.',
+  admin: 'Platform staff only. Sign in with the seeded admin account.',
 };
 
 function LoginForm() {
@@ -190,11 +199,14 @@ function LoginForm() {
         })}
       </div>
 
-      {/* Email and password, for every portal. The only method that works
-          without Firebase, and the only one staff accounts have at all. In
-          dev mode this same form accepts any email and password - there is no
-          separate developer panel. */}
-      <PasswordForm portal={portal} onSuccess={routeToRole} onError={setError} />
+      {/* Email and password is permanent for staff portals - the only method
+          they have at all. For students it is a stopgap until Firebase
+          arrives: with Firebase configured they sign in with Google or OTP
+          and this form is gone. In dev mode the same form accepts any email
+          and password - there is no separate developer panel. */}
+      {(portal !== 'student' || devBypass) && (
+        <PasswordForm portal={portal} onSuccess={routeToRole} onError={setError} />
+      )}
 
       {devBypass === null ? (
         <div className="flex flex-col gap-3" role="status" aria-live="polite">
@@ -229,10 +241,12 @@ function LoginForm() {
         </>
       )}
 
-      {/* Signup is a student-only door. Staff accounts are created by an admin
-          and arrive as a set-password link, so there is nothing to offer here
-          for the other three portals. */}
-      {portal === 'student' && (
+      {/* Signup is a student-only door, and only while password signup exists
+          (no Firebase yet). With Firebase configured, signing in with Google
+          or OTP routes a new student to profile completion automatically.
+          Staff accounts are created by an admin and arrive as a set-password
+          link, so there is nothing to offer here for the other three portals. */}
+      {portal === 'student' && devBypass && (
         <p className="text-[13px] leading-relaxed text-[var(--text-secondary)]">
           New here?{' '}
           <Link href="/signup" className="font-medium underline">
@@ -311,9 +325,10 @@ function PortalHelp() {
   const params = useSearchParams();
   const picked = params.get('portal');
   const portal: Role = isRole(picked) ? picked : 'student';
+  const devBypass = useDevBypass();
   return (
     <p className="mt-2 text-sm leading-relaxed text-[var(--text-secondary)]">
-      {PORTAL_HELP[portal]}
+      {devBypass ? PORTAL_HELP_DEV[portal] : PORTAL_HELP[portal]}
     </p>
   );
 }

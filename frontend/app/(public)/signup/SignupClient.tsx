@@ -11,6 +11,7 @@ import { ErrorState } from '@/components/ui/States';
 import { useAuth } from '@/hooks/useAuth';
 import { useRole } from '@/hooks/useRole';
 import { isDevModeForced } from '@/lib/devSession';
+import { useDevBypass } from '@/components/auth/DevSignIn';
 import { setLocalToken } from '@/lib/localSession';
 import api, { apiErrorMessage } from '@/lib/api';
 import { isValidIndianMobile } from '@/lib/format';
@@ -24,11 +25,15 @@ import type { Stream } from '@/lib/types';
  * accounts are created by an admin and arrive as a set-password link, and the
  * admin account is seeded.
  *
- * The page has two modes, because there are two ways to become a student:
+ * Password signup is a stopgap until Firebase arrives. The page has two modes,
+ * because until then there are two ways to become a student:
  *
  *   No Firebase user  -> a real signup. Name, email, phone and a password,
  *                        posted to /auth/signup, which creates the credential
- *                        and the student row together.
+ *                        and the student row together. Offered only while no
+ *                        Firebase project is configured; afterwards a bare
+ *                        visit bounces to /login, where Google/OTP routes new
+ *                        students here for profile completion.
  *   A Firebase user   -> profile completion, as before. They already proved
  *                        who they are with Google or an OTP, so there is no
  *                        password to set; /students/ grants the student role.
@@ -42,6 +47,7 @@ export default function SignupClient() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
   const { role, loading: roleLoading } = useRole();
+  const devBypass = useDevBypass();
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -74,6 +80,16 @@ export default function SignupClient() {
   useEffect(() => {
     if (bouncing && role) router.replace(PORTAL_HOME[role]);
   }, [bouncing, role, router]);
+
+  // Password signup exists only until Firebase arrives. With Firebase
+  // configured, an account starts with Google or OTP on /login, which routes
+  // new students here for profile completion - so a bare visit with no
+  // Firebase user means go sign in first.
+  const passwordSignupOff = !authLoading && devBypass === false && !user;
+
+  useEffect(() => {
+    if (passwordSignupOff) router.replace('/login?portal=student');
+  }, [passwordSignupOff, router]);
 
   function validate(): boolean {
     const next: Record<string, string> = {};
@@ -136,7 +152,7 @@ export default function SignupClient() {
     }
   }
 
-  if (authLoading || roleLoading || bouncing) {
+  if (authLoading || roleLoading || bouncing || passwordSignupOff || (devBypass === null && !user)) {
     return (
       <main id="main" className="flex min-h-[100dvh] items-center justify-center px-6" role="status" aria-live="polite">
         <span className="sr-only">Taking you to your portal</span>
