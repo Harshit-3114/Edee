@@ -35,6 +35,17 @@ class Settings(BaseSettings):
     SEED_ADMIN_EMAIL: str
     SEED_ADMIN_PASSWORD: str
 
+    # Boot without a Firebase service account in staging/production.
+    #
+    # The lifespan check otherwise refuses: with no Admin SDK there is nothing
+    # to verify Google/OTP tokens against. Set this when Firebase does not
+    # exist yet - email/password sign-in (all portals) works without it, and
+    # every Firebase code path fails closed (401/502) rather than open. The
+    # day the service account arrives, unset this and mount the JSON: the
+    # student portal flips to Google/OTP automatically. AUTH_SECRET is still
+    # required, and dev mode stays forbidden outside development.
+    ALLOW_NO_FIREBASE: bool = False
+
     # How long a college or coaching set-password link stays usable. Long
     # enough to survive a weekend and an admin forwarding it on, short enough
     # that a link left in an inbox is not a permanent way in.

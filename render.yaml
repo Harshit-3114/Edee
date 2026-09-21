@@ -11,6 +11,8 @@ services:
         sync: false
       - key: FIREBASE_SERVICE_ACCOUNT_PATH
         value: /app/firebase-service-account.json
+      - key: ALLOW_NO_FIREBASE
+        value: "true"
       - key: AUTH_SECRET
         sync: false
       - key: RAZORPAY_KEY_ID

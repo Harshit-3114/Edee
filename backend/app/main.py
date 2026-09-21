@@ -46,10 +46,12 @@ async def lifespan(app: FastAPI):
                 "and dev mode is forbidden outside development"
                 % settings.ENVIRONMENT
             )
-        if not firebase_available():
+        if not firebase_available() and not settings.ALLOW_NO_FIREBASE:
             raise RuntimeError(
                 "refusing to boot: ENVIRONMENT=%s but no Firebase service "
-                "account is configured" % settings.ENVIRONMENT
+                "account is configured (set ALLOW_NO_FIREBASE=1 to run on "
+                "email/password sign-in only until Firebase exists)"
+                % settings.ENVIRONMENT
             )
         # The local password path signs its own session tokens. Without a
         # secret it would fall back to the public development constant, which

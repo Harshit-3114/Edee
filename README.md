@@ -536,6 +536,9 @@ FIREBASE_SERVICE_ACCOUNT_PATH=./firebase-service-account.json
 # `openssl rand -hex 32`. Staging and production REFUSE TO BOOT without it;
 # development falls back to a public constant and warns loudly.
 AUTH_SECRET=
+# Boot without a Firebase service account (until Firebase exists). Email and
+# password sign-in work; Google/OTP return 401/502 until configured.
+ALLOW_NO_FIREBASE=true
 # The account `python -m seeds.local_admin` creates. Must be a real domain:
 # the login endpoint rejects .test and .localhost.
 # Local development defaults (change for your setup):
