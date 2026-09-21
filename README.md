@@ -216,33 +216,29 @@ Dev mode remains for the case it was built for: throwaway identities that
 create and destroy their own data. When the backend has no Firebase service
 account (and `ENVIRONMENT` is development), it runs in **dev mode**, and
 `GET /health` reports it (`dev_mode: true`). `start.bat` prints a banner when
-it detects it. On the login page the dev panel now sits collapsed under
-"Developer sign-in", below the password form.
+it detects it. There is no separate developer panel on the login page: the
+email/password form accepts any email and password in dev mode and signs you
+into whichever portal you picked. A real credential still signs in through the
+normal path first; anything else provisions a mock user for that portal behind
+the scenes (the first college or centre for staff portals), so every page has
+working rows behind it.
 
-- **Students sign in with phone + OTP, like production.** Enter any 10
-  digits, then any 4 digits on the code screen — no Firebase, no SMS. The
-  server provisions a mock profile behind the token, so the student lands
-  with everything working: profile, shortlisting, checkout. The same number
-  twice is the same mock user.
 - **Mock payments walk the real path.** Checkout totals tick up from the
   same pricing code; the dev pay button then runs the same fulfillment as
   the Razorpay webhook (same applications, audit rows, notifications) with
   `dev_`-tagged rows that can never be mistaken for money. The dashboard
   confirms with a dev-mode note.
-- **Staff portals keep a directory picker** (college / coaching / admin):
-  `POST /dev/mock-user` provisions real database rows behind the token,
-  idempotently: signing in twice as the same tag reuses the same rows.
-- **Mock users are process-scoped.** Sign-out calls `DELETE /dev/mock-user`,
-  which removes the identity and everything it created; server shutdown
-  sweeps any leftovers. A mock user never survives the process that made it.
+- **Mock users are idempotent and process-scoped.** Signing in twice with the
+  same email reuses the same rows instead of tripping unique constraints.
+  Sign-out calls `DELETE /dev/mock-user`, which removes the identity and
+  everything it created; server shutdown sweeps any leftovers. A mock user
+  never survives the process that made it.
 - **Empty database, open laptop: mock catalogue.** Booting in dev mode with
   no colleges seeds a small catalogue (colleges with application windows, a
   coaching centre, scholarship slabs) so every page has something to show.
   Skipped when dev mode is off, and skipped when colleges exist — real data
   is never touched.
-- `GET /dev/directory` (dev mode only, otherwise 404) lists colleges and
-  centres to sign in as.
-- `DEV_MODE=1` in `backend/.env` (or `NEXT_PUBLIC_DEV_MODE=1` for the panel)
+- `DEV_MODE=1` in `backend/.env` (or `NEXT_PUBLIC_DEV_MODE=1` on the frontend)
   forces dev mode even with keys configured, while `DEV_MODE=0` forces it off
   even without them; unset means auto-detect. Both are refused outside
   development: staging and production fail to boot with them.

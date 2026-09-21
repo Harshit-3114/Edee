@@ -13,8 +13,7 @@ import {
 } from '@phosphor-icons/react/dist/ssr';
 import GoogleSignIn from '@/components/auth/GoogleSignIn';
 import PasswordForm from '@/components/auth/PasswordForm';
-import DevSignIn, { useDevBypass } from '@/components/auth/DevSignIn';
-import DevOTPForm from '@/components/auth/DevOTPForm';
+import { useDevBypass } from '@/components/auth/DevSignIn';
 import SiteFooter from '../_components/SiteFooter';
 import SiteHeader from '../_components/SiteHeader';
 import PhoneOTPForm from '@/components/auth/PhoneOTPForm';
@@ -192,8 +191,10 @@ function LoginForm() {
       </div>
 
       {/* Email and password, for every portal. The only method that works
-          without Firebase, and the only one staff accounts have at all. */}
-      <PasswordForm onSuccess={routeToRole} onError={setError} />
+          without Firebase, and the only one staff accounts have at all. In
+          dev mode this same form accepts any email and password - there is no
+          separate developer panel. */}
+      <PasswordForm portal={portal} onSuccess={routeToRole} onError={setError} />
 
       {devBypass === null ? (
         <div className="flex flex-col gap-3" role="status" aria-live="polite">
@@ -224,29 +225,6 @@ function LoginForm() {
 
               <GoogleSignIn onSuccess={route} onError={setError} />
             </>
-          )}
-
-          {/* The dev bypass is still here, just no longer the only way in.
-              Collapsed, because on a laptop with no Firebase keys the password
-              form above is now the realistic path. */}
-          {devBypass && (
-            <details className="rounded-lg border border-[var(--line)] px-3 py-2">
-              <summary className="cursor-pointer text-[13px] text-[var(--text-secondary)]">
-                Developer sign-in
-              </summary>
-              <div className="mt-3 flex flex-col gap-3">
-                {portal === 'student' ? (
-                  <DevOTPForm
-                    onSuccess={() =>
-                      void router.replace(next ?? '/student/dashboard?welcome=1')
-                    }
-                    onError={setError}
-                  />
-                ) : (
-                  <DevSignIn />
-                )}
-              </div>
-            </details>
           )}
         </>
       )}
