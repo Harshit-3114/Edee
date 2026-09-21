@@ -179,7 +179,7 @@ git push origin main
 | File | Purpose |
 |------|---------|
 | `backend/Dockerfile.prod` | Production container (multi‑stage, non‑root, gunicorn + uvicorn). |
-| `backend/alembic/` | Migration scripts (run on every deploy). |
+| `backend/migrations/` | Migration scripts, chain 001→latest (run on every deploy). |
 | `backend/requirements.txt` | Pinned Python deps (run `pip-audit`). |
 | `frontend/next.config.prod.js` | Next.js production config (`output: standalone`). |
 | `frontend/vercel.json` | Rewrites `/api/*` → Render, CSP / security headers. |

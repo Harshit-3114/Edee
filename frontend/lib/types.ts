@@ -38,6 +38,12 @@ export interface College {
   application_phases?: string | null;
   /** Backend-served path (e.g. /uploads/logos/…) or absolute URL. */
   logo_url?: string | null;
+  /** YouTube link, embedded on the landing page. Edited in the admin portal. */
+  video_url?: string | null;
+  /** Long-form overview, edited in the admin portal. */
+  overview?: string | null;
+  /** Ordered Q&A list, edited in the admin portal. */
+  faqs?: CollegeFaq[] | null;
 }
 
 /** One frequently-asked question on a college landing page. */

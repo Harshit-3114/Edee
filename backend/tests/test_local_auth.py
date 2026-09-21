@@ -282,6 +282,52 @@ async def test_login_is_case_insensitive_on_email(api):
 
 
 @pytest.mark.asyncio
+async def test_login_with_phone_number(api):
+    await api.post("/auth/signup", json=SIGNUP)
+    res = await api.post(
+        "/auth/login",
+        json={"identifier": SIGNUP["phone"], "password": SIGNUP["password"]},
+    )
+    assert res.status_code == 200
+    assert res.json()["role"] == "student"
+    assert local_token.verify(res.json()["token"]) is not None
+
+
+@pytest.mark.asyncio
+async def test_login_with_formatted_phone_number(api):
+    """A +91 prefix, spaces and dashes are stripped before lookup."""
+    await api.post("/auth/signup", json=SIGNUP)
+    res = await api.post(
+        "/auth/login",
+        json={"identifier": "+91 98765-43210", "password": SIGNUP["password"]},
+    )
+    assert res.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_login_with_unknown_phone_matches_email_failures(api):
+    """An unknown number must read exactly like an unknown email."""
+    await api.post("/auth/signup", json=SIGNUP)
+    unknown_phone = await api.post(
+        "/auth/login", json={"identifier": "9000000000", "password": "not it"}
+    )
+    unknown_email = await api.post(
+        "/auth/login", json={"identifier": "nobody@example.com", "password": "not it"}
+    )
+    assert unknown_phone.status_code == unknown_email.status_code == 401
+    assert unknown_phone.json()["detail"] == unknown_email.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_login_with_phone_and_wrong_password_fails(api):
+    await api.post("/auth/signup", json=SIGNUP)
+    res = await api.post(
+        "/auth/login", json={"identifier": SIGNUP["phone"], "password": "not it"}
+    )
+    assert res.status_code == 401
+
+
+@pytest.mark.asyncio
 async def test_login_says_the_same_thing_for_every_failure(api):
     """Wrong password and no such account must be indistinguishable."""
     await api.post("/auth/signup", json=SIGNUP)

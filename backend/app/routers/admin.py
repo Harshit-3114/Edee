@@ -24,7 +24,12 @@ from app.services import health as health_checks
 from app.services.firebase import assign_role, revoke_access
 from app.services.email import portal_url, send_email
 from app.core.slug import is_valid_slug, make_slug
-from app.models.college import clean_gallery, dump_gallery, parse_gallery
+from app.models.college import (
+    clean_gallery,
+    dump_faqs,
+    dump_gallery,
+    parse_gallery,
+)
 from app.routers.college_portal import CourseCreate, CourseUpdate
 
 logger = logging.getLogger(__name__)
@@ -69,6 +74,14 @@ class CollegeCreate(BaseModel):
         return clean_gallery(value)
 
 
+class CollegeFaq(BaseModel):
+    """One landing-page FAQ. The admin UI edits these as `Question | Answer`
+    lines and sends them here parsed; the validator below is the second net."""
+
+    question: str = Field(min_length=1, max_length=300)
+    answer: str = Field(min_length=1, max_length=2000)
+
+
 class CollegeUpdate(BaseModel):
     name: Optional[str] = Field(default=None, min_length=3, max_length=200)
     location: Optional[str] = Field(default=None, max_length=300)
@@ -81,11 +94,41 @@ class CollegeUpdate(BaseModel):
     landing_gallery_urls: Optional[List[str]] = Field(default=None, max_length=10)
     # Free-text admission rounds, shown on the public landing page.
     application_phases: Optional[str] = Field(default=None, max_length=2000)
+    # Campus video (YouTube link, embedded on the landing page).
+    video_url: Optional[str] = Field(default=None, max_length=500)
+    # Long-form overview, shown above the short landing description.
+    overview: Optional[str] = Field(default=None, max_length=5000)
+    # Ordered Q&A list. An empty list clears every FAQ.
+    faqs: Optional[List[CollegeFaq]] = Field(default=None, max_length=20)
 
     @field_validator("landing_gallery_urls")
     @classmethod
     def _gallery(cls, value: Optional[List[str]]) -> Optional[List[str]]:
         return clean_gallery(value)
+
+    @field_validator("video_url")
+    @classmethod
+    def _video(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        if not cleaned:
+            return None
+        if not cleaned.startswith(("http://", "https://")):
+            raise ValueError("Video URL must start with http:// or https://")
+        return cleaned
+
+    @field_validator("faqs")
+    @classmethod
+    def _faqs(cls, value: Optional[List[CollegeFaq]]) -> Optional[List[CollegeFaq]]:
+        if value is None:
+            return None
+        cleaned = [
+            CollegeFaq(question=f.question.strip(), answer=f.answer.strip())
+            for f in value
+            if f.question.strip() and f.answer.strip()
+        ]
+        return cleaned
 
     @field_validator("application_phases")
     @classmethod
@@ -328,10 +371,15 @@ async def update_college(
         "landing_description",
         "landing_gallery_urls",
         "application_phases",
+        "video_url",
+        "overview",
+        "faqs",
     )
     fields = [k for k in allowed if k in updates]
     if "landing_gallery_urls" in updates:
         updates["landing_gallery_urls"] = dump_gallery(updates["landing_gallery_urls"])
+    if "faqs" in updates:
+        updates["faqs"] = dump_faqs(updates["faqs"])
     assignments = ", ".join(f"{k} = :{k}" for k in fields)
 
     result = await db.execute(

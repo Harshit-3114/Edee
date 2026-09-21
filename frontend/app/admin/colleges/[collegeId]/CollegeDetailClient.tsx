@@ -15,7 +15,42 @@ import { EmptyState, ErrorState, Skeleton } from '@/components/ui/States';
 import api, { apiErrorMessage } from '@/lib/api';
 import { apiFileUrl, formatDate, formatFee } from '@/lib/format';
 import { PORTAL_LABEL } from '@/lib/portals';
-import type { AdminCollegeDetail, CollegeType, Stream } from '@/lib/types';
+import type { AdminCollegeDetail, CollegeFaq, CollegeType, Stream } from '@/lib/types';
+
+/**
+ * FAQs as the admin edits them: one `Question | Answer` per line, the same
+ * one-per-line pattern as the gallery field.
+ */
+function faqsToText(faqs?: CollegeFaq[] | null): string {
+  return (faqs ?? []).map((f) => `${f.question} | ${f.answer}`).join('\n');
+}
+
+function parseFaqText(text: string): { faqs: CollegeFaq[]; error: string | null } {
+  const lines = text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+  const faqs: CollegeFaq[] = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    const sep = lines[i].indexOf('|');
+    if (sep < 0) {
+      return { faqs: [], error: `FAQ line ${i + 1} needs a " | " between question and answer.` };
+    }
+    const question = lines[i].slice(0, sep).trim();
+    const answer = lines[i].slice(sep + 1).trim();
+    if (!question || !answer) {
+      return { faqs: [], error: `FAQ line ${i + 1} needs both a question and an answer.` };
+    }
+    if (question.length > 300 || answer.length > 2000) {
+      return { faqs: [], error: `FAQ line ${i + 1} is too long.` };
+    }
+    faqs.push({ question, answer });
+  }
+  if (faqs.length > 20) {
+    return { faqs: [], error: 'Keep at most 20 FAQs.' };
+  }
+  return { faqs, error: null };
+}
 
 /**
  * `initialCollege` is the record the server already fetched with the session cookie.
@@ -53,6 +88,17 @@ export default function CollegeDetailClient({
     closing: '',
     intake: '',
   });
+  // FAQs are edited as raw text and parsed on save, so a half-typed line is
+  // never silently dropped the way parse-on-change would.
+  const [faqText, setFaqText] = useState(() => faqsToText(initialCollege?.faqs));
+  const faqInitFor = useRef<string | null>(initialCollege?.id ?? null);
+  useEffect(() => {
+    if (college && faqInitFor.current !== college.id) {
+      faqInitFor.current = college.id;
+      setFaqText(faqsToText(college.faqs));
+    }
+  }, [college]);
+
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editFields, setEditFields] = useState({
     seats: '',
@@ -100,6 +146,8 @@ export default function CollegeDetailClient({
     if (college.name.trim().length < 3) next.name = 'Enter the full college name.';
     if (!college.city.trim()) next.city = 'City is required.';
     if (!college.state.trim()) next.state = 'State is required.';
+    const parsedFaqs = parseFaqText(faqText);
+    if (parsedFaqs.error) next.faqs = parsedFaqs.error;
     setErrors(next);
     if (Object.keys(next).length > 0) return;
 
@@ -117,6 +165,9 @@ export default function CollegeDetailClient({
         landing_description: college.landing_description?.trim() || null,
         landing_gallery_urls: college.landing_gallery_urls ?? null,
         application_phases: college.application_phases?.trim() || null,
+        video_url: college.video_url?.trim() || null,
+        overview: college.overview?.trim() || null,
+        faqs: parsedFaqs.faqs,
       });
       setSaved(true);
     } catch (err) {
@@ -439,6 +490,50 @@ export default function CollegeDetailClient({
                   {...fieldProps}
                   value={college.application_phases ?? ''}
                   onChange={(event) => update('application_phases', event.target.value)}
+                />
+              )}
+            </Field>
+
+            <Field
+              label="Campus video URL"
+              hint="YouTube link, embedded on the public landing page."
+            >
+              {(fieldProps) => (
+                <Input
+                  {...fieldProps}
+                  type="url"
+                  value={college.video_url ?? ''}
+                  onChange={(event) => update('video_url', event.target.value)}
+                  placeholder="https://www.youtube.com/watch?v=…"
+                />
+              )}
+            </Field>
+
+            <Field
+              label="Overview"
+              hint="Long-form description, shown above the short text on the public landing page."
+            >
+              {(fieldProps) => (
+                <Textarea
+                  {...fieldProps}
+                  value={college.overview ?? ''}
+                  onChange={(event) => update('overview', event.target.value)}
+                />
+              )}
+            </Field>
+
+            <Field
+              label="FAQs"
+              hint='One per line as "Question | Answer". Shown on the public landing page.'
+              error={errors.faqs}
+            >
+              {(fieldProps) => (
+                <Textarea
+                  {...fieldProps}
+                  value={faqText}
+                  onChange={(event) => setFaqText(event.target.value)}
+                  rows={4}
+                  placeholder="What streams are offered? | UG and PG programs…"
                 />
               )}
             </Field>
