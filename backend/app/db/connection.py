@@ -16,10 +16,17 @@ def _database_url() -> tuple[str, dict]:
     asyncpg.connect() accepts neither `sslmode` nor `channel_binding` - so a
     stock Neon URL crashes with TypeError. Both are stripped here, and any
     `sslmode` other than `disable` becomes `connect_args={"ssl": True}`,
-    which is the documented asyncpg way to demand TLS. Local URLs carry no
-    query string and pass through untouched.
+    which is the documented asyncpg way to demand TLS.
+
+    A bare `postgresql://` scheme (exactly what Neon dashboard copy-paste and
+    the Neon->Render integration deliver) is also upgraded to
+    `postgresql+asyncpg://`: without a driver SQLAlchemy defaults to psycopg2,
+    which is not installed and never will be. Local URLs already carry the
+    driver and no query string, so they pass through untouched.
     """
     parts = urlsplit(settings.DATABASE_URL)
+    if parts.scheme == "postgresql":
+        parts = parts._replace(scheme="postgresql+asyncpg")
     params = parse_qsl(parts.query)
     sslmode = next((v for k, v in params if k == "sslmode"), None)
     query = [(k, v) for k, v in params if k not in ("sslmode", "channel_binding")]
