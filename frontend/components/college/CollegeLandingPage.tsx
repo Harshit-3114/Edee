@@ -41,7 +41,7 @@ export default function CollegeLandingPage({ college }: { college: CollegeLandin
       <LandingBackLink />
 
       {/* ==================== HERO ==================== */}
-      <section className="relative rounded-2xl overflow-hidden bg-[var(--surface-sunken)] animate-fade-up" style={stagger(0)}>
+      <section className="relative rounded-xl overflow-hidden bg-[var(--surface-sunken)] animate-fade-up" style={stagger(0)}>
         {/* background image / gradient */}
         {college.landing_hero_image_url ? (
           <Image
@@ -53,7 +53,7 @@ export default function CollegeLandingPage({ college }: { college: CollegeLandin
             sizes="100vw"
           />
         ) : (
-          <div className="absolute inset-0 bg-gradient-to-br from-[var(--accent)]/10 via-transparent to-[var(--accent-secondary)]/10" />
+          <div className="absolute inset-0 bg-gradient-to-b from-[var(--accent)]/10 via-transparent to-[var(--accent-secondary)]/10" />
         )}
         <div className="relative p-8 md:p-12 grid lg:grid-cols-[1fr_1fr] gap-8 items-start">
           {/* left – identity */}
@@ -276,7 +276,7 @@ export default function CollegeLandingPage({ college }: { college: CollegeLandin
 
       {/* ==================== CTA ==================== */}
       <section className="mt-12 animate-fade-up" style={stagger(10)}>
-        <div className="rounded-2xl bg-[var(--accent-subtle)] px-6 py-8 md:px-10 md:py-12 border border-[var(--accent-line)]">
+        <div className="rounded-xl bg-[var(--accent-subtle)] px-6 py-8 md:px-10 md:py-12 border border-[var(--accent-line)]">
           <h2 className="text-base font-medium tracking-tight">Like what you see?</h2>
           <p className="mt-1 text-sm leading-relaxed text-[var(--text-secondary)]">
             Shortlist these courses and pay once. The college sees your application the moment payment clears.
