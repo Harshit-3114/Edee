@@ -1,13 +1,26 @@
 fastapi==0.115.0
 uvicorn[standard]==0.30.0
 sqlalchemy[asyncio]==2.0.35
-asyncpg==0.29.0
+asyncpg==0.31.0
 alembic==1.13.3
 pydantic==2.9.0
 pydantic-settings==2.5.0
 python-dotenv==1.0.1
 firebase-admin==6.5.0
-razorpay==1.4.1
+razorpay==2.0.1
 httpx==0.27.2
 python-multipart==0.0.12
+openpyxl==3.1.5
 email-validator==2.1.0.post1
+slowapi==0.1.9
+
+# Password hashing for the local email/password sign-in path. Used directly
+# rather than through passlib: passlib is unmaintained and its bcrypt backend
+# raises against bcrypt 4.x.
+bcrypt==4.2.0
+
+# razorpay (still, as of 2.0.1) imports pkg_resources at module scope.
+# setuptools 81 deprecated it and 84 removed it, so on Python 3.12 the app
+# cannot even be imported without this pin. Revisit when razorpay drops the
+# import; until then, upgrading setuptools past 80 breaks the backend outright.
+setuptools<81

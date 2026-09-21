@@ -1,0 +1,319 @@
+@import 'tailwindcss';
+
+/*
+  Design tokens.
+
+  One accent for the whole product (maroon). Portal identity comes from the
+  nav and the content, never from a different accent colour - a student and an
+  admin should feel they are in the same product, one floor apart.
+
+  Shape rule, applied everywhere (DESIGN.md §4):
+    buttons, inputs, tabs .................. 8px  (rounded-lg)
+    cards, tables, modals .................. 12px (rounded-xl)
+    badges, avatars, counters .............. full pill
+  Nothing else. No mixed corner scales.
+*/
+
+@theme {
+  --font-sans: "Mulish", sans-serif;
+  --font-serif: "Poppins", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace;
+
+  --radius: 0.5rem;
+
+  --breakpoint-sm: 40rem;
+  --breakpoint-md: 48rem;
+  --breakpoint-lg: 64rem;
+  --breakpoint-xl: 80rem;
+  --breakpoint-2xl: 96rem;
+}
+
+:root {
+  color-scheme: light;
+
+  /* Surfaces */
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --surface-sunken: #ffffff;
+  --surface-hover: #ffffff;
+
+  /* Text */
+  --text-primary: #18181b;
+  --text-secondary: #52525b;
+  --text-muted: #71717a;
+  --text-inverse: #fafafa;
+
+  /* Lines */
+  --line: #e4e4e7;
+  --line-strong: #d4d4d8;
+
+  /* Accent - locked for the whole product */
+  --accent: #7f1d1d;
+  --accent-hover: #641414;
+  --accent-pressed: #4c1010;
+  --pine: #3d0b0b;
+  --accent-subtle: #f0d6d6;
+  --accent-line: #e4b8b8;
+  --accent-text: #641414;
+
+  /* Status */
+  --success: #047857;
+  --success-subtle: #c6e9d4;
+  --success-line: #a7f3d0;
+  --action: #c2410c;
+  --action-subtle: #f7cfa1;
+  --action-line: #fed7aa;
+  --action-solid: #9a3412;
+  --brass: #8c6a3c;
+  --brass-subtle: #eedcab;
+  --danger: #b91c1c;
+  --danger-subtle: #f5c8c8;
+  --danger-line: #fecaca;
+  --warning: #b45309;
+  --warning-subtle: #f9e2a8;
+  --warning-line: #fde68a;
+  --warning-solid: #92400e;
+
+  --focus-ring: #7f1d1d;
+
+  /* Shadows are tinted to the surface hue, never pure black. */
+  --shadow-sm: 0 1px 2px rgb(24 24 27 / 0.06);
+  --shadow-md: 0 4px 16px -4px rgb(24 24 27 / 0.1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* Light-locked: dark preference still renders the maroon light theme. */
+    color-scheme: light;
+
+    --surface: #ffffff;
+    --surface-raised: #ffffff;
+    --surface-sunken: #ffffff;
+    --surface-hover: #ffffff;
+
+    --text-primary: #18181b;
+    --text-secondary: #52525b;
+    --text-muted: #71717a;
+    --text-inverse: #fafafa;
+
+    --line: #e4e4e7;
+    --line-strong: #d4d4d8;
+
+    --accent: #7f1d1d;
+    --accent-hover: #c26b6b;
+    --accent-pressed: #a34d4d;
+    --pine: #3d0b0b;
+    --accent-subtle: #f0d6d6;
+    --accent-line: #e4b8b8;
+    --accent-text: #641414;
+
+    --success: #047857;
+    --success-subtle: #c6e9d4;
+    --success-line: #a7f3d0;
+    --action: #c2410c;
+    --action-subtle: #f7cfa1;
+    --action-line: #fed7aa;
+    --action-solid: #9a3412;
+    --brass: #8c6a3c;
+    --brass-subtle: #eedcab;
+    --danger: #b91c1c;
+    --danger-subtle: #f5c8c8;
+    --danger-line: #fecaca;
+    --warning: #b45309;
+    --warning-subtle: #f9e2a8;
+    --warning-line: #fde68a;
+    --warning-solid: #92400e;
+
+    --focus-ring: #7f1d1d;
+
+    --shadow-sm: 0 1px 2px rgb(24 24 27 / 0.06);
+    --shadow-md: 0 4px 16px -4px rgb(24 24 27 / 0.1);
+  }
+}
+
+@layer base {
+  * {
+    border-color: var(--line);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--surface);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* One focus treatment for the whole product. */
+  :where(a, button, input, select, textarea, [tabindex]):focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  /* Money and counts read as data, not prose. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+    font-family: var(--font-mono);
+  }
+}
+
+@layer utilities {
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      var(--surface-sunken) 25%,
+      var(--surface-hover) 37%,
+      var(--surface-sunken) 63%
+    );
+    background-size: 400% 100%;
+    animation: skeleton-shimmer 1.4s ease infinite;
+  }
+
+  .btn {
+    transition: background-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+  }
+  .btn:hover {
+    box-shadow: var(--shadow-md);
+  }
+  .btn:active {
+    transform: scale(0.98);
+  }
+
+  .card {
+    transition: box-shadow 0.2s ease, border-color 0.2s ease;
+  }
+  .card:hover {
+    box-shadow: var(--shadow-sm);
+    border-color: var(--line-strong);
+  }
+
+  .link-hover {
+    @apply transition-colors duration-200;
+  }
+  .link-hover:hover {
+    color: var(--text-primary);
+  }
+
+  /* Entrance animations */
+  @keyframes fade-up {
+    from {
+      opacity: 0;
+      transform: translateY(16px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  .animate-fade-up {
+    animation: fade-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  @keyframes scale-in {
+    from {
+      opacity: 0;
+      transform: scale(0.96);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+  .animate-scale-in {
+    animation: scale-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+}
+
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0 50%;
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  .rise {
+    animation: rise 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  /* Slow sheen sweep for the translucent site header. */
+  @keyframes sheen {
+    from {
+      transform: translateX(-120%) skewX(-12deg);
+    }
+    to {
+      transform: translateX(420%) skewX(-12deg);
+    }
+  }
+  .animate-sheen {
+    animation: sheen 8s ease-in-out infinite;
+  }
+
+  /* Scroll reveals share the mount keyframes. The hidden base matches the
+     keyframes' first frame, so there is no jump when the animation starts. */
+  .reveal {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  .reveal.is-visible {
+    animation: rise 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  /* Pop-in children: hidden until the parent Reveal fires, then springy. */
+  .reveal .pop {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  .reveal.is-visible .pop {
+    animation: scale-in 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  }
+}
+
+/* Partner logo marquee. The list is rendered twice and translated half its
+   own width, so the loop has no seam. Distance in % keeps it correct at any
+   list length. The global reduced-motion rule above stills it. */
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-marquee {
+  animation: marquee 40s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

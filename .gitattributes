@@ -1,0 +1,19 @@
+# Normalise line endings so Windows and Linux checkouts agree and diffs stay
+# readable. Without this, every file committed from Windows shows as fully
+# rewritten when someone on Linux touches it.
+* text=auto eol=lf
+
+# Batch files are parsed by cmd.exe, which requires CRLF. LF-only checkouts
+# die mid-script with "... was unexpected at this time" — exactly the failure
+# this rule prevents.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff  binary
+*.woff2 binary
+
+# Generated: collapse in diffs and exclude from language stats.
+package-lock.json linguist-generated=true -diff

@@ -1,0 +1,115 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: dev
+          POSTGRES_PASSWORD: dev
+          POSTGRES_DB: college_platform_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U dev -d college_platform_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql+asyncpg://dev:dev@localhost:5432/college_platform_test
+      TEST_DATABASE_URL: postgresql+asyncpg://dev:dev@localhost:5432/college_platform_test
+      FIREBASE_SERVICE_ACCOUNT_PATH: ./nonexistent-ci.json
+      RAZORPAY_KEY_ID: rzp_test_key
+      RAZORPAY_KEY_SECRET: test_secret
+      RAZORPAY_WEBHOOK_SECRET: webhook_secret
+      CORS_ORIGINS: http://localhost:3000
+      ENVIRONMENT: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        working-directory: backend
+        run: pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Lint
+        working-directory: backend
+        run: python -m ruff check .
+
+      - name: Test
+        working-directory: backend
+        run: python -m pytest -q --cov=app --cov-report=term-missing
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Test
+        working-directory: frontend
+        run: npm run test
+
+      - name: Typecheck
+        working-directory: frontend
+        run: npm run typecheck
+
+      - name: Lint
+        working-directory: frontend
+        run: npm run lint
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build backend image
+        run: docker build -f backend/Dockerfile backend
+
+      - name: Build frontend image
+        run: >
+          docker build
+          --build-arg NEXT_PUBLIC_API_URL=http://localhost:8000
+          --build-arg NEXT_PUBLIC_FIREBASE_API_KEY=ci
+          --build-arg NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=ci
+          --build-arg NEXT_PUBLIC_FIREBASE_PROJECT_ID=ci
+          --build-arg NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=ci
+          --build-arg NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=ci
+          --build-arg NEXT_PUBLIC_FIREBASE_APP_ID=ci
+          -f frontend/Dockerfile frontend
+
+      - name: Validate production compose merge
+        env:
+          AUTH_SECRET: ci-auth-secret-for-tests-only
+          SEED_ADMIN_EMAIL: admin@ci.test
+          SEED_ADMIN_PASSWORD: Test@1234
+          RAZORPAY_KEY_ID: ci
+          RAZORPAY_KEY_SECRET: ci
+          RAZORPAY_WEBHOOK_SECRET: ci
+          CORS_ORIGINS: https://example.com
+          NEXT_PUBLIC_API_URL: https://api.example.com
+          NEXT_PUBLIC_FIREBASE_API_KEY: ci
+          NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ci
+          NEXT_PUBLIC_FIREBASE_PROJECT_ID: ci
+          NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: ci
+          NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ci
+          NEXT_PUBLIC_FIREBASE_APP_ID: ci
+        run: docker compose -f docker-compose.yml -f docker-compose.prod.yml config --quiet
