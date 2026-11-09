@@ -27,6 +27,21 @@ firebase-service-account.json
 *-service-account.json
 serviceAccountKey.json
 
+# Deployment bulk-import files - hold live production credentials
+render-import.env
+render.env
+vercel.env
+
+# Production database dumps - contain student PII, payment records and hashes
+neon-import.sql
+*-import.sql
+*.dump
+
+# Agent / skill working data
+.agents/
+.opencode/
+.superpowers/
+
 # Local overrides
 docker-compose.override.yml
 
