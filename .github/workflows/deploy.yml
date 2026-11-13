@@ -34,9 +34,11 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     environment: production
-    # Manual on purpose, and skipped entirely where the SSH deploy secrets
-    # are not configured.
-    if: ${{ secrets.SSH_HOST != '' }}
+    # `secrets` is not available in a job-level `if`, so the deploy host is
+    # read into the job environment and each step checks it there. Manual on
+    # purpose, and inert where the SSH credentials are not configured.
+    env:
+      DEPLOY_HOST: ${{ secrets.SSH_HOST }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -45,6 +47,7 @@ jobs:
           ref: ${{ github.sha }}
 
       - name: Sync compose files to the server
+        if: env.DEPLOY_HOST != ''
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.SSH_HOST }}
@@ -54,6 +57,7 @@ jobs:
           target: ${{ secrets.DEPLOY_DIR }}
 
       - name: Pull, migrate, restart
+        if: env.DEPLOY_HOST != ''
         uses: appleboy/ssh-action@v1
         env:
           DEPLOY_DIR: ${{ secrets.DEPLOY_DIR }}
