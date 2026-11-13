@@ -34,6 +34,9 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     environment: production
+    # Manual on purpose, and skipped entirely where the SSH deploy secrets
+    # are not configured.
+    if: ${{ secrets.SSH_HOST != '' }}
     steps:
       - uses: actions/checkout@v4
         with:

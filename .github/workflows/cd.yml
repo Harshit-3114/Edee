@@ -17,6 +17,12 @@ permissions:
 jobs:
   build-push:
     runs-on: ubuntu-latest
+    # This pipeline publishes production images, so it only runs where it is
+    # actually configured. A fork or a mirror without the Firebase web config
+    # has nothing to bake into the frontend image, and failing there would
+    # train everyone to ignore a red build. The CI workflow is the one that
+    # must always be green.
+    if: ${{ vars.NEXT_PUBLIC_API_URL != '' }}
     steps:
       - uses: actions/checkout@v4
 

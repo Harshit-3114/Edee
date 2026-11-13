@@ -5,6 +5,7 @@ __pycache__/
 *.egg-info/
 venv/
 env/
+.venv/
 .pytest_cache/
 .coverage
 htmlcov/
@@ -41,6 +42,7 @@ neon-import.sql
 .agents/
 .opencode/
 .superpowers/
+skills-lock.json
 
 # Local overrides
 docker-compose.override.yml
@@ -56,3 +58,6 @@ Thumbs.db
 *.swp
 *.log
 .neon
+
+# Stray files created by a mistyped redirect target
+127.0.0.1
